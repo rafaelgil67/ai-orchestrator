@@ -2,6 +2,7 @@
   | "discovery"
   | "diagnosis"
   | "approval"
+  | "revision"
   | "planning"
   | "execution"
   | "verification"
@@ -77,3 +78,5 @@ export interface ProjectState {
 
   metadata: Record<string, unknown>;
 }
+
+
