@@ -3,10 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "AI Software Factory — experimental autonomous software-development orchestrator: brief → strategy → approval-gated planning → execution → verification → repair/replanning, with full autonomy tracing.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UPDATE-WITH-YOUR-ORG/ai-software-factory.git"
+  },
+  "license": "MIT",
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "tsx tests/run-all.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

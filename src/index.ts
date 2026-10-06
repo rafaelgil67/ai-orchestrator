@@ -1,87 +1,90 @@
 /**
- * AI Orchestrator — MVP foundation
+ * AI Software Factory — public demo entry point.
  *
- * The orchestrator receives a project brief, creates a plan, delegates
- * tasks to specialized agents, and verifies their results.
+ * Wires the real orchestration stack with mock components and runs the
+ * full autonomous loop end-to-end:
  *
- * No external provider is hard-coded yet. Devin, OpenAI, Claude or other
- * agents will be connected through adapters in a later phase.
+ *   ANALYZE → APPROVE → PLAN → EXECUTE → VERIFY → REPAIR|REPLAN → …
+ *
+ * Everything runs in memory with MockAIProvider + MockAgent — no
+ * external providers, credentials or side effects. Real agents are
+ * future adapters behind the Agent / AIProvider contracts.
  */
+import { ProjectStateManager } from "./core/project-state/manager.js";
+import { StrategicAnalysisService } from "./core/strategy/service.js";
+import { StrategicBrainEngine } from "./core/strategy/engine.js";
+import { BlueprintValidator } from "./core/strategy/validator.js";
+import { ProjectApprovalGate } from "./core/governance/project-approval-gate.js";
+import { PlanningService } from "./core/planning/planning-service.js";
+import { Planner } from "./core/planning/planner.js";
+import { AgentRegistry } from "./agents/providers/agent-registry.js";
+import { MockAIProvider } from "./agents/providers/mock-provider.js";
+import { MockAgent } from "./agents/providers/mock-agent.js";
+import { DefaultExecutionEngine } from "./core/execution/executor.js";
+import { DefaultExecutionScheduler } from "./core/execution/scheduler.js";
+import { VerificationService } from "./core/verification/verification-service.js";
+import { AutonomyLoopEngine } from "./core/autonomy/autonomy-engine.js";
 
-type AgentRole =
-  | "product"
-  | "architect"
-  | "developer"
-  | "database"
-  | "uiux"
-  | "qa"
-  | "security"
-  | "devops";
+// ---- Composition root: every component is swappable via contracts ----
+const stateManager = new ProjectStateManager();
+const strategicService = new StrategicAnalysisService(
+  stateManager,
+  new StrategicBrainEngine(new MockAIProvider(), new BlueprintValidator())
+);
+const approvalGate = new ProjectApprovalGate(stateManager);
+const planningService = new PlanningService(stateManager, new Planner());
+const agentRegistry = new AgentRegistry();
+agentRegistry.register(new MockAgent());
+const scheduler = new DefaultExecutionScheduler(
+  stateManager,
+  new DefaultExecutionEngine(stateManager, agentRegistry)
+);
+const verificationService = new VerificationService(stateManager);
+const engine = new AutonomyLoopEngine(
+  stateManager,
+  planningService,
+  scheduler,
+  verificationService
+);
 
-type TaskStatus = "pending" | "running" | "blocked" | "completed" | "failed";
-
-interface ProjectBrief {
-  name: string;
-  objective: string;
-  constraints: string[];
-}
-
-interface Task {
-  id: string;
-  title: string;
-  role: AgentRole;
-  status: TaskStatus;
-  dependsOn: string[];
-}
-
-interface ProjectState {
-  brief: ProjectBrief;
-  tasks: Task[];
-  decisions: string[];
-}
-
-class Orchestrator {
-  createPlan(brief: ProjectBrief): ProjectState {
-    const tasks: Task[] = [
-      { id: "T01", title: "Analizar requerimientos", role: "product", status: "pending", dependsOn: [] },
-      { id: "T02", title: "Diseñar arquitectura", role: "architect", status: "pending", dependsOn: ["T01"] },
-      { id: "T03", title: "Diseñar base de datos", role: "database", status: "pending", dependsOn: ["T02"] },
-      { id: "T04", title: "Diseñar UX/UI", role: "uiux", status: "pending", dependsOn: ["T02"] },
-      { id: "T05", title: "Implementar aplicación", role: "developer", status: "pending", dependsOn: ["T03", "T04"] },
-      { id: "T06", title: "Ejecutar QA y pruebas", role: "qa", status: "pending", dependsOn: ["T05"] },
-      { id: "T07", title: "Auditar seguridad", role: "security", status: "pending", dependsOn: ["T05"] },
-      { id: "T08", title: "Preparar despliegue", role: "devops", status: "pending", dependsOn: ["T06", "T07"] }
-    ];
-
-    return {
-      brief,
-      tasks,
-      decisions: []
-    };
-  }
-
-  nextTasks(state: ProjectState): Task[] {
-    return state.tasks.filter(task =>
-      task.status === "pending" &&
-      task.dependsOn.every(id => state.tasks.find(t => t.id === id)?.status === "completed")
-    );
-  }
-}
-
-const brief: ProjectBrief = {
-  name: "AI Software Factory",
-  objective: "Crear un orquestador autónomo que reciba un brief inicial y coordine agentes especializados para construir aplicaciones.",
-  constraints: [
-    "Proyecto independiente de AsegurApp y SR Asesores.",
-    "Devin se integrará como agente ejecutor de desarrollo mediante un adaptador.",
-    "Acciones sensibles requerirán políticas explícitas de autorización."
-  ]
+// ---- 1. ANALYZE: brief → strategic blueprint → approval phase ----
+const brief = {
+  projectName: "Demo Project",
+  prompt:
+    "Build a small task-management web app with user auth, a REST API " +
+    "and automated tests."
 };
+console.log(`\n== AI Software Factory demo ==`);
+console.log(`Brief: ${brief.projectName}\n`);
+console.log("[1] ANALYZE — generating strategic blueprint…");
+const { project } = await strategicService.analyze(brief);
+console.log(`    project ${project.id} → ${project.phase}/${project.status}`);
 
-const orchestrator = new Orchestrator();
-const state = orchestrator.createPlan(brief);
+// ---- 2. APPROVE: the human gate — explicit, never automatic ----
+console.log("[2] APPROVE — human approval recorded via Approval Gate");
+approvalGate.approve(project.id, "demo run — approved by operator");
 
-console.log(JSON.stringify({
-  project: state.brief.name,
-  firstTasks: orchestrator.nextTasks(state)
-}, null, 2));
+// ---- 3. RUN: the autonomy loop drives the rest ----
+console.log("[3] RUN — autonomy loop (plan → execute → verify → recover)\n");
+const run = await engine.run(project.id, { maxCycles: 50 });
+
+const final = stateManager.getProject(project.id);
+console.log(`Result: ${run.stoppedReason} in ${run.cycles} cycle(s)`);
+console.log(`Final: ${final.phase}/${final.status} — ` +
+  `${final.tasks.filter(t => t.status === "completed").length}/` +
+  `${final.tasks.length} tasks completed`);
+
+if (final.metadata.repairCount || final.metadata.replanCount) {
+  console.log(`Recovery: repairs=${final.metadata.repairCount ?? 0} ` +
+    `replans=${final.metadata.replanCount ?? 0}`);
+}
+
+console.log(`\nAutonomy trace (${final.autonomyTrace?.length ?? 0} entries):`);
+for (const e of final.autonomyTrace ?? []) {
+  const task = e.taskId ? ` task=${e.taskId.slice(0, 12)}…` : "";
+  console.log(
+    `  [${String(e.cycle).padStart(2)}] ${e.phaseFrom} → ${e.phaseTo} ` +
+    `| ${e.action} | ${e.outcome}${task}`
+  );
+}
+console.log();

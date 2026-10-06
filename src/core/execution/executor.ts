@@ -106,7 +106,10 @@ export class DefaultExecutionEngine implements ExecutionEngine {
                 result: dependency?.result
               };
             }
-          )
+          ),
+        // Repair Engine MVP: transporte del contexto de reparación al
+        // agente (indefinido cuando no aplica — comportamiento intacto).
+        repairContext: task.repairContext
       },
       acceptanceCriteria:
         task.acceptanceCriteria ?? []

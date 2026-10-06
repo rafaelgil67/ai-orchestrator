@@ -6,6 +6,7 @@
   ProjectPhase,
   ProjectStatus
 } from "./types.js";
+import { AutonomyTrace } from "./types.js";
 
 function createId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -177,6 +178,21 @@ export class ProjectStateManager {
       ...quality
     };
 
+    state.updatedAt = now();
+
+    return this.clone(state);
+  }
+
+  appendAutonomyTrace(
+    projectId: string,
+    trace: AutonomyTrace
+  ): ProjectState {
+    const state = this.requireProject(projectId);
+
+    state.autonomyTrace = [
+      ...(state.autonomyTrace ?? []),
+      trace
+    ];
     state.updatedAt = now();
 
     return this.clone(state);

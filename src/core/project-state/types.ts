@@ -1,4 +1,5 @@
 ﻿import { AgentResult } from "../../agents/contracts/agent.js";
+import type { RepairContext } from "../repair/contracts.js";
 
 export type ProjectPhase =
   | "discovery"
@@ -19,6 +20,29 @@ export type ProjectStatus =
   | "paused"
   | "completed"
   | "failed";
+
+export type LoopDecision =
+  | "continue"
+  | "retry"
+  | "block"
+  | "wait"
+  | "complete"
+  | "fail"
+  | "repair"
+  | "replan";
+
+export interface AutonomyTrace {
+  cycle: number;
+  phaseFrom: ProjectPhase;
+  phaseTo: ProjectPhase;
+  action: LoopDecision;
+  taskId?: string;
+  agentId?: string;
+  attempt?: number;
+  outcome: string;
+  reason: string;
+  at: string;
+}
 
 export interface ProjectBrief {
   name: string;
@@ -74,6 +98,11 @@ export interface ProjectTask {
   lastFailureReason?: string;
   lastAttemptAt?: string;
 
+  /** Contexto de reparación inyectado por el Repair Engine tras una
+   *  verification failure atribuible a esta tarea. Aditivo y opcional;
+   *  el executor lo transporta dentro de AgentTask.inputs. */
+  repairContext?: RepairContext;
+
   attemptHistory: TaskAttempt[];
 }
 
@@ -95,6 +124,11 @@ export interface ProjectState {
   decisions: ProjectDecision[];
 
   activeAgent?: string;
+
+  /** Trazabilidad del Autonomy Loop Engine (FASE loop). Aditiva y
+   *  opcional: proyectos creados antes de la fase no la tienen.
+   *  Complementa (no reemplaza) attemptHistory de cada tarea. */
+  autonomyTrace?: AutonomyTrace[];
 
   quality: {
     testsPassed: number;
