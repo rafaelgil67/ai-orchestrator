@@ -1,4 +1,6 @@
-﻿export type ProjectPhase =
+﻿import { AgentResult } from "../../agents/contracts/agent.js";
+
+export type ProjectPhase =
   | "discovery"
   | "diagnosis"
   | "approval"
@@ -33,11 +35,23 @@ export interface ProjectDecision {
   createdAt: string;
 }
 
+export interface TaskAttempt {
+  attempt: number;
+  retry: boolean;
+  agentId: string;
+  startedAt: string;
+  completedAt: string;
+  success: boolean;
+  summary: string;
+  result: AgentResult;
+}
+
 export interface ProjectTask {
   id: string;
   title: string;
   description: string;
   role: string;
+
   status:
     | "pending"
     | "ready"
@@ -45,9 +59,22 @@ export interface ProjectTask {
     | "blocked"
     | "completed"
     | "failed";
+
   dependsOn: string[];
+  acceptanceCriteria: string[];
+
   attempts: number;
+  maxRetries: number;
+  retryCount: number;
+
   assignedAgent?: string;
+
+  result?: AgentResult;
+
+  lastFailureReason?: string;
+  lastAttemptAt?: string;
+
+  attemptHistory: TaskAttempt[];
 }
 
 export interface ProjectState {
@@ -78,5 +105,3 @@ export interface ProjectState {
 
   metadata: Record<string, unknown>;
 }
-
-
