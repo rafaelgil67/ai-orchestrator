@@ -113,3 +113,34 @@ export function parseDecisionBody(body: unknown): DecisionInput {
 export function parseEmptyBody(body: unknown): void {
   assertPlainObject(body, []);
 }
+
+/**
+ * Content-Type policy (R-07): when a request carries a body, it must be
+ * declared as application/json (charset suffix allowed). Checked BEFORE
+ * consuming the body. A genuinely empty body stays allowed — POST /run
+ * sends no payload.
+ */
+export function assertJsonContentType(req: IncomingMessage): void {
+  const hasBody =
+    req.headers["content-length"] !== undefined ||
+    req.headers["transfer-encoding"] !== undefined;
+  if (!hasBody) {
+    return;
+  }
+
+  const contentType = req.headers["content-type"];
+  const normalized = (
+    Array.isArray(contentType) ? contentType[0] : contentType ?? ""
+  )
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  if (normalized !== "application/json") {
+    throw new ApiError(
+      415,
+      "unsupported_media_type",
+      "Request body must be application/json."
+    );
+  }
+}

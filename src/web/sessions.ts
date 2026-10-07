@@ -34,17 +34,29 @@ import { serializeProject, SessionDTO } from "./dto.js";
 
 export interface SessionConfig {
   maxSessions: number;
+  /** R-04: cap of simultaneously active sessions per client IP — one IP
+   *  cannot monopolize the shared MAX_SESSIONS budget. */
+  maxSessionsPerIp: number;
   ttlMs: number;
   /** Pause between engine steps — keeps the demo visually readable. */
   stepDelayMs: number;
   maxCycles: number;
+  /** R-03: SSE listeners per session and process-wide. */
+  maxListenersPerSession: number;
+  maxSseListeners: number;
+  /** R-02: SSE keepalive comment interval. */
+  heartbeatIntervalMs: number;
 }
 
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   maxSessions: 10,
+  maxSessionsPerIp: 3,
   ttlMs: 30 * 60 * 1000,
   stepDelayMs: 400,
-  maxCycles: 50
+  maxCycles: 50,
+  maxListenersPerSession: 5,
+  maxSseListeners: 50,
+  heartbeatIntervalMs: 25_000
 };
 
 export interface CoreStack {
@@ -58,11 +70,15 @@ export interface DemoSession {
   id: string;
   createdAt: number;
   lastActivityAt: number;
+  /** R-04: normalized client IP that owns this session. */
+  clientIp: string;
   stack: CoreStack;
   projectId?: string;
   running: boolean;
   stoppedReason?: string;
   listeners: Set<ServerResponse>;
+  /** R-02: shared heartbeat timer — exists only while listeners > 0. */
+  heartbeat?: ReturnType<typeof setInterval> & { unref?: () => void };
 }
 
 export type DemoEventType =
@@ -108,6 +124,10 @@ function sleep(ms: number): Promise<void> {
 
 export class DemoSessionService {
   private readonly sessions = new Map<string, DemoSession>();
+  /** R-04: clientIp → active sessionIds. Kept in sync on create/expiry. */
+  private readonly sessionsByIp = new Map<string, Set<string>>();
+  /** R-03: process-wide SSE connection count. */
+  private sseListenerTotal = 0;
   private readonly cleanupTimer: ReturnType<typeof setInterval> &
     { unref?: () => void };
 
@@ -124,7 +144,8 @@ export class DemoSessionService {
 
   async create(
     brief: string,
-    projectName?: string
+    projectName?: string,
+    clientIp = "unknown"
   ): Promise<DemoSession> {
     this.expireStale();
     if (this.sessions.size >= this.config.maxSessions) {
@@ -134,11 +155,24 @@ export class DemoSessionService {
         "Demo capacity reached; please try again later."
       );
     }
+    // R-04: active sessions per IP — an IP cannot monopolize capacity.
+    const ipSessions = this.sessionsByIp.get(clientIp);
+    if (
+      ipSessions &&
+      ipSessions.size >= this.config.maxSessionsPerIp
+    ) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many active demo sessions from your address."
+      );
+    }
 
     const session: DemoSession = {
       id: createSessionId(),
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
+      clientIp,
       stack: buildCoreStack(),
       running: false,
       listeners: new Set()
@@ -150,6 +184,13 @@ export class DemoSessionService {
     });
     session.projectId = project.id;
     this.sessions.set(session.id, session);
+
+    let set = this.sessionsByIp.get(clientIp);
+    if (!set) {
+      set = new Set();
+      this.sessionsByIp.set(clientIp, set);
+    }
+    set.add(session.id);
     return session;
   }
 
@@ -354,11 +395,43 @@ export class DemoSessionService {
     }
   }
 
+  /** R-03: pre-flight check — must pass BEFORE the 200 SSE headers. */
+  assertSubscribable(sessionId: string): void {
+    const session = this.get(sessionId);
+    if (
+      session.listeners.size >= this.config.maxListenersPerSession
+    ) {
+      throw new ApiError(
+        429,
+        "listener_limit_reached",
+        "Too many live connections for this demo session."
+      );
+    }
+    if (this.sseListenerTotal >= this.config.maxSseListeners) {
+      throw new ApiError(
+        429,
+        "listener_limit_reached",
+        "Too many live demo connections; please try again later."
+      );
+    }
+  }
+
   /** Registers an SSE listener; the response stays open until close. */
   subscribe(sessionId: string, res: ServerResponse): void {
+    this.assertSubscribable(sessionId);
     const session = this.get(sessionId);
+
     session.listeners.add(res);
-    res.on("close", () => session.listeners.delete(res));
+    this.sseListenerTotal += 1;
+    this.ensureHeartbeat(session);
+
+    res.on("close", () => {
+      session.listeners.delete(res);
+      this.sseListenerTotal -= 1;
+      if (session.listeners.size === 0) {
+        this.stopHeartbeat(session);
+      }
+    });
 
     // Catch-up: current state + full trace so late joiners see everything.
     this.send(res, "state", { session: this.serialize(session) });
@@ -394,17 +467,53 @@ export class DemoSessionService {
     res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
+  /** R-02: one shared heartbeat per session — only while it has
+   *  listeners. Emits an SSE comment (": ping"), never a DemoEvent. */
+  private ensureHeartbeat(session: DemoSession): void {
+    if (session.heartbeat) {
+      return;
+    }
+    const timer = setInterval(() => {
+      for (const res of session.listeners) {
+        if (!res.writableEnded && !res.destroyed) {
+          res.write(": ping\n\n");
+        }
+      }
+      if (session.listeners.size === 0) {
+        this.stopHeartbeat(session);
+      }
+    }, this.config.heartbeatIntervalMs) as ReturnType<
+      typeof setInterval
+    > & { unref?: () => void };
+    timer.unref?.();
+    session.heartbeat = timer;
+  }
+
+  private stopHeartbeat(session: DemoSession): void {
+    if (session.heartbeat) {
+      clearInterval(session.heartbeat);
+      session.heartbeat = undefined;
+    }
+  }
+
   expireStale(now: number = Date.now()): number {
     let expired = 0;
     for (const [id, session] of this.sessions) {
       if (now - session.lastActivityAt > this.config.ttlMs) {
+        this.stopHeartbeat(session);
         for (const res of session.listeners) {
           if (!res.writableEnded) {
             res.end();
           }
         }
+        this.sseListenerTotal -= session.listeners.size;
         session.listeners.clear();
         this.sessions.delete(id);
+        const ipSet = this.sessionsByIp.get(session.clientIp);
+        ipSet?.delete(id);
+        if (ipSet && ipSet.size === 0) {
+          this.sessionsByIp.delete(session.clientIp);
+        }
         expired += 1;
       }
     }

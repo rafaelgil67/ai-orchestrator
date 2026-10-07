@@ -9,6 +9,7 @@ declare module "node:http" {
     method?: string;
     url?: string;
     headers: Record<string, string | string[] | undefined>;
+    socket: { remoteAddress?: string };
   }
 
   export interface ServerResponse {

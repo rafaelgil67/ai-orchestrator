@@ -9,7 +9,7 @@ import {
   DemoSessionService,
   DEFAULT_SESSION_CONFIG
 } from "../src/web/sessions.js";
-import { Server } from "node:http";
+import { Server, get, IncomingMessage } from "node:http";
 
 let passed = 0;
 let failed = 0;
@@ -304,6 +304,239 @@ try {
     (await fetch(`${url}/../package.json`)).status === 404 ||
       (await fetch(`${url}/%2e%2e/package.json`)).status === 404
   );
+
+  // ================= 6G.2 hardening =================
+
+  // ---- R-05: strict CSP ----
+  const cspRes = await fetch(`${url}/`);
+  const csp = cspRes.headers.get("content-security-policy") ?? "";
+  t(
+    "CSP is strict (no unsafe-inline, all directives present)",
+    !csp.includes("unsafe-inline") &&
+      csp.includes("script-src 'self'") &&
+      csp.includes("style-src 'self'") &&
+      csp.includes("connect-src 'self'") &&
+      csp.includes("object-src 'none'") &&
+      csp.includes("base-uri 'none'") &&
+      csp.includes("frame-ancestors 'none'")
+  );
+
+  // ---- R-07: Content-Type policy (needs ≥2 free IP slots → own server)
+  const ct = await startDemoServer(0, TEST_CONFIG);
+  try {
+    t(
+      "application/json → 201",
+      (await post(`${ct.url}/api/demo`, { brief: "ok" })).status === 201
+    );
+    t(
+      "json; charset=utf-8 → 201",
+      (
+        await fetch(`${ct.url}/api/demo`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json; charset=utf-8"
+          },
+          body: JSON.stringify({ brief: "ok" })
+        })
+      ).status === 201
+    );
+    for (const [ct2, label] of [
+      ["text/plain", "text/plain"],
+      ["application/x-www-form-urlencoded", "urlencoded"],
+      ["multipart/form-data", "multipart"]
+    ] as const) {
+      const res = await fetch(`${ct.url}/api/demo`, {
+        method: "POST",
+        headers: { "Content-Type": ct2 },
+        body: JSON.stringify({ brief: "x" })
+      });
+      t(`${label} → 415`, res.status === 415 &&
+        (await res.json())?.error?.code === "unsupported_media_type");
+    }
+    t(
+      "no Content-Type + body → 415",
+      (
+        await fetch(`${ct.url}/api/demo`, {
+          method: "POST",
+          headers: { "Content-Type": "" },
+          body: JSON.stringify({ brief: "x" })
+        })
+      ).status === 415
+    );
+  } finally {
+    ct.server.close();
+  }
+
+  // ---- R-04: per-IP session cap + X-Forwarded-For policy ----
+  const ipSrv = await startDemoServer(0, TEST_CONFIG);
+  try {
+    for (let i = 0; i < 3; i++) {
+      await post(`${ipSrv.url}/api/demo`, { brief: `s${i}` });
+    }
+    const fourth = await post(`${ipSrv.url}/api/demo`, { brief: "s3" });
+    t(
+      "4th session from same IP → 429",
+      fourth.status === 429 &&
+        (await fourth.json())?.error?.code === "rate_limited"
+    );
+    // XFF must be IGNORED without TRUST_PROXY — spoofing cannot bypass
+    const spoof = await fetch(`${ipSrv.url}/api/demo`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-For": "203.0.113.9"
+      },
+      body: JSON.stringify({ brief: "spoof" })
+    });
+    t("X-Forwarded-For ignored by default → still 429",
+      spoof.status === 429);
+  } finally {
+    ipSrv.server.close();
+  }
+
+  const proxySrv = await startDemoServer(0, TEST_CONFIG, {
+    trustProxy: true
+  });
+  try {
+    // Distinct XFF identities each get their own cap
+    for (let i = 1; i <= 4; i++) {
+      const res = await fetch(`${proxySrv.url}/api/demo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Forwarded-For": `10.0.0.${i}`
+        },
+        body: JSON.stringify({ brief: "xff" })
+      });
+      if (res.status !== 201) {
+        t(`TRUST_PROXY distinct IP ${i} → 201`, false);
+        break;
+      }
+    }
+    t("TRUST_PROXY: 4 distinct IPs → 4 sessions", true);
+    // Same forwarded IP hits its own cap at 4th create
+    for (let i = 0; i < 3; i++) {
+      await fetch(`${proxySrv.url}/api/demo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Forwarded-For": "10.9.9.9"
+        },
+        body: JSON.stringify({ brief: "xff" })
+      });
+    }
+    const overCap = await fetch(`${proxySrv.url}/api/demo`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-For": "10.9.9.9"
+      },
+      body: JSON.stringify({ brief: "xff" })
+    });
+    t("TRUST_PROXY: same forwarded IP → 429 at cap",
+      overCap.status === 429);
+  } finally {
+    proxySrv.server.close();
+  }
+
+  // ---- R-02 heartbeat + R-03 listener caps (fast heartbeat config) ----
+  const sseSrv = await startDemoServer(0, {
+    ...TEST_CONFIG,
+    heartbeatIntervalMs: 60,
+    maxListenersPerSession: 3,
+    maxSseListeners: 4
+  });
+  const openConns: Array<() => void> = [];
+  const openSse = (u: string) =>
+    new Promise<{ status: number; ctype: string; body: IncomingMessage }>(
+      (resolve, reject) => {
+        const req = get(u, res => {
+          const chunks: string[] = [];
+          res.on("data", c => chunks.push(c.toString()));
+          resolve({
+            status: res.statusCode ?? 0,
+            ctype: res.headers["content-type"] ?? "",
+            body: res as IncomingMessage & { _c?: string[] }
+          });
+          // keep raw chunks accessible via a side channel
+          (res as unknown as { _c?: string[] })._c = chunks;
+        });
+        req.on("error", reject);
+        openConns.push(() => req.destroy());
+      }
+    );
+
+  try {
+    const hsid = (await (
+      await post(`${sseSrv.url}/api/demo`, { brief: "hb" })
+    ).json()).sessionId;
+
+    // R-03 per-session cap: 3 OK → 4th 429
+    const conns = [];
+    for (let i = 0; i < 3; i++) {
+      conns.push(await openSse(`${sseSrv.url}/api/demo/${hsid}/events`));
+    }
+    t(
+      "listeners up to cap → 200 SSE",
+      conns.every(c => c.status === 200)
+    );
+    // global cap is 4 and 3 are open → 1 more slot elsewhere? per-session
+    // cap (3) hits first for the SAME session:
+    const over = await fetch(`${sseSrv.url}/api/demo/${hsid}/events`);
+    t(
+      "listener cap+1 → 429, not SSE",
+      over.status === 429 &&
+        !over.headers.get("content-type")?.includes("text/event-stream")
+    );
+    void (await over.text());
+
+    // R-02 heartbeat: idle connection receives ": ping" comments
+    await new Promise(r => setTimeout(r, 300));
+    const chunks = (
+      conns[0].body as unknown as { _c?: string[] }
+    )._c?.join("") ?? "";
+    t(
+      "SSE heartbeat emits ': ping' on idle connection",
+      chunks.includes(": ping")
+    );
+    t(
+      "heartbeat is a comment, not an event",
+      !chunks.includes("event: ping")
+    );
+
+    // Close one conn → slot frees (deterministic: we control destroy)
+    conns[0].body.destroy();
+    await new Promise(r => setTimeout(r, 120));
+    const freedConn = await openSse(
+      `${sseSrv.url}/api/demo/${hsid}/events`
+    );
+    t("closed listener frees slot → 200", freedConn.status === 200);
+    freedConn.body.destroy();
+    await new Promise(r => setTimeout(r, 120));
+    // Back to exactly 2 listeners (conns[1], conns[2]).
+
+    // R-03 global cap (maxSseListeners=4): fill 2 remaining slots on a
+    // second session → next connection must hit the global cap.
+    const gs = (await (
+      await post(`${sseSrv.url}/api/demo`, { brief: "g" })
+    ).json()).sessionId;
+    await openSse(`${sseSrv.url}/api/demo/${gs}/events`); // total=3
+    await openSse(`${sseSrv.url}/api/demo/${gs}/events`); // total=4
+    const globalOver = await fetch(
+      `${sseSrv.url}/api/demo/${gs}/events`
+    );
+    t(
+      "global listener cap → 429, not SSE",
+      globalOver.status === 429 &&
+        !globalOver.headers
+          .get("content-type")
+          ?.includes("text/event-stream")
+    );
+    void (await globalOver.text());
+  } finally {
+    for (const close of openConns) close();
+    sseSrv.server.close();
+  }
 } finally {
   server.close();
 }

@@ -11,6 +11,8 @@ export type ApiErrorCode =
   | "invalid_state_transition"
   | "execution_in_progress"
   | "rate_limited"
+  | "listener_limit_reached"
+  | "unsupported_media_type"
   | "not_found"
   | "internal_error";
 

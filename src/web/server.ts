@@ -23,6 +23,7 @@ import {
 } from "./sessions.js";
 import { serializeTrace } from "./dto.js";
 import {
+  assertJsonContentType,
   parseCreateBody,
   parseDecisionBody,
   parseEmptyBody,
@@ -45,8 +46,35 @@ const SECURITY_HEADERS: Record<string, string> = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
   "Content-Security-Policy":
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    "default-src 'self'; script-src 'self'; style-src 'self'; " +
+    "img-src 'self' data:; connect-src 'self'; object-src 'none'; " +
+    "base-uri 'none'; frame-ancestors 'none'"
 };
+
+/**
+ * R-04: conservative client IP extraction. X-Forwarded-For is honored
+ * ONLY when trustProxy is enabled (trusted reverse proxy); otherwise the
+ * socket address is authoritative. IPv4-mapped IPv6 is normalized so
+ * "::ffff:127.0.0.1" and "127.0.0.1" count as the same client.
+ */
+export function clientIpOf(
+  req: IncomingMessage,
+  trustProxy: boolean
+): string {
+  let ip: string | undefined;
+  if (trustProxy) {
+    const forwarded = req.headers["x-forwarded-for"];
+    const first = (
+      Array.isArray(forwarded) ? forwarded[0] : forwarded ?? ""
+    )
+      .split(",")[0]
+      .trim();
+    ip = first || req.socket.remoteAddress;
+  } else {
+    ip = req.socket.remoteAddress;
+  }
+  return (ip ?? "unknown").replace(/^::ffff:/, "");
+}
 
 function json(
   res: ServerResponse,
@@ -87,7 +115,8 @@ async function serveStatic(
 async function route(
   req: IncomingMessage,
   res: ServerResponse,
-  sessions: DemoSessionService
+  sessions: DemoSessionService,
+  trustProxy: boolean
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://localhost");
   const path = url.pathname;
@@ -101,8 +130,13 @@ async function route(
 
   // ---- Create demo ----
   if (method === "POST" && path === "/api/demo") {
+    assertJsonContentType(req);
     const input = parseCreateBody(await readBody(req));
-    const session = await sessions.create(input.brief, input.projectName);
+    const session = await sessions.create(
+      input.brief,
+      input.projectName,
+      clientIpOf(req, trustProxy)
+    );
     json(res, 201, { sessionId: session.id });
     return;
   }
@@ -129,9 +163,10 @@ async function route(
     }
 
     if (method === "GET" && action === "events") {
-      // Validate the session BEFORE committing to a 200 SSE response —
-      // a missing session must answer 404, not an empty stream.
-      sessions.get(sessionId);
+      // Validate the session AND the listener caps BEFORE committing to
+      // a 200 SSE response — failures must answer 404/429 JSON, never
+      // an empty stream.
+      sessions.assertSubscribable(sessionId);
       res.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache",
@@ -145,6 +180,7 @@ async function route(
     }
 
     if (method === "POST" && action === "approve") {
+      assertJsonContentType(req);
       const input = parseDecisionBody(await readBody(req));
       const session = sessions.get(sessionId);
       sessions.approve(session, input.rationale);
@@ -153,6 +189,7 @@ async function route(
     }
 
     if (method === "POST" && action === "reject") {
+      assertJsonContentType(req);
       const input = parseDecisionBody(await readBody(req));
       const session = sessions.get(sessionId);
       sessions.reject(session, input.rationale);
@@ -161,6 +198,7 @@ async function route(
     }
 
     if (method === "POST" && action === "run") {
+      assertJsonContentType(req);
       parseEmptyBody(await readBody(req));
       const session = sessions.get(sessionId);
       sessions.run(session);
@@ -178,13 +216,26 @@ async function route(
   throw new ApiError(404, "not_found", "Not found.");
 }
 
+export interface ServerOptions {
+  /**
+   * R-04: trust X-Forwarded-For for client identity. Enable ONLY when the
+   * demo runs behind a reverse proxy that sets/overwrites the header —
+   * otherwise clients could spoof their IP and bypass the per-IP cap.
+   * Env: TRUST_PROXY=true.
+   */
+  trustProxy?: boolean;
+}
+
 export function createDemoServer(
-  config: SessionConfig = DEFAULT_SESSION_CONFIG
+  config: SessionConfig = DEFAULT_SESSION_CONFIG,
+  options: ServerOptions = {}
 ): { server: Server; sessions: DemoSessionService } {
   const sessions = new DemoSessionService(config);
+  const trustProxy =
+    options.trustProxy ?? process.env.TRUST_PROXY === "true";
 
   const server = createServer((req, res) => {
-    route(req, res, sessions).catch(error => {
+    route(req, res, sessions, trustProxy).catch(error => {
       const apiError = toApiError(error);
       if (apiError.status >= 500) {
         console.error(
@@ -206,9 +257,10 @@ export function createDemoServer(
 /** Starts the server; used both by the npm script and by tests (port 0). */
 export function startDemoServer(
   port: number,
-  config?: SessionConfig
+  config?: SessionConfig,
+  options?: ServerOptions
 ): Promise<{ server: Server; url: string; sessions: DemoSessionService }> {
-  const { server, sessions } = createDemoServer(config);
+  const { server, sessions } = createDemoServer(config, options);
   return new Promise(resolve => {
     server.listen(port, () => {
       const address = server.address();
