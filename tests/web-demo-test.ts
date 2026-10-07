@@ -541,6 +541,30 @@ try {
   server.close();
 }
 
+// Frontend error dictionary coverage — every ApiErrorCode emitted by the
+// backend must have a mapped message in public/app.js, or the UI falls
+// back to the generic "Something went wrong" (production bug: 429
+// rate_limited surfaced as unknownError).
+{
+  const { readFileSync } = await import("node:fs");
+  const { dirname, join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const errorsSrc = readFileSync(join(root, "src/web/errors.ts"), "utf8");
+  const appJs = readFileSync(join(root, "public/app.js"), "utf8");
+  const codes = [...errorsSrc.matchAll(/"([a-z_]+)"/g)].map(m => m[1]);
+  const unmapped = codes.filter(c => !appJs.includes(`${c}:`));
+  t(
+    "every ApiErrorCode has a frontend message",
+    unmapped.length === 0,
+    `unmapped: ${unmapped.join(",")}`
+  );
+  t(
+    "rate_limited maps to a specific message",
+    /rate_limited: ".*limit.*"/i.test(appJs)
+  );
+}
+
 console.log(`\n${passed} passed · ${failed} failed\n`);
 if (failed > 0) {
   process.exit(1);
