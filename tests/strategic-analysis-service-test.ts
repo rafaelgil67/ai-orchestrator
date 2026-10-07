@@ -21,13 +21,13 @@ const analysisService = new StrategicAnalysisService(
 );
 
 const result = await analysisService.analyze({
-  projectName: "Plataforma de gestión de seguros",
+  projectName: "Insurance management platform",
   prompt:
-    "Crear una plataforma profesional para administrar clientes, pólizas, renovaciones, siniestros y documentos.",
+    "Build a professional platform to manage clients, policies, renewals, claims and documents.",
   additionalContext: [
-    "Debe ser segura.",
-    "Debe ser escalable.",
-    "Debe tener una experiencia de usuario profesional."
+    "It must be secure.",
+    "It must be scalable.",
+    "It must have a professional user experience."
   ]
 });
 

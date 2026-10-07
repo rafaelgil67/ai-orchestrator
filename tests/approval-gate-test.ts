@@ -5,9 +5,9 @@ const stateManager = new ProjectStateManager();
 const gate = new ProjectApprovalGate(stateManager);
 
 const approvedProject = stateManager.createProject({
-  name: "Proyecto aprobado",
-  objective: "Validar Approval Gate",
-  originalPrompt: "Crear una aplicación profesional.",
+  name: "Approved project",
+  objective: "Validate Approval Gate",
+  originalPrompt: "Build a professional application.",
   constraints: []
 });
 
@@ -23,7 +23,7 @@ stateManager.updateStatus(
 
 const approval = gate.approve(
   approvedProject.id,
-  "El diagnóstico cumple los criterios establecidos."
+  "The diagnosis meets the established criteria."
 );
 
 console.log("APPROVAL RESULT");
@@ -51,9 +51,9 @@ try {
 }
 
 const rejectedProject = stateManager.createProject({
-  name: "Proyecto rechazado",
-  objective: "Validar rechazo",
-  originalPrompt: "Crear otra aplicación.",
+  name: "Rejected project",
+  objective: "Validate rejection",
+  originalPrompt: "Build another application.",
   constraints: []
 });
 
@@ -69,7 +69,7 @@ stateManager.updateStatus(
 
 const rejection = gate.reject(
   rejectedProject.id,
-  "La especificación necesita mayor definición antes de continuar."
+  "The specification needs further definition before continuing."
 );
 
 console.log("REJECTION RESULT");

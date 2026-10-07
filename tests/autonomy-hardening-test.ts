@@ -1,7 +1,7 @@
-// Autonomy Loop Hardening — correcciones C1/C2/C3 del diagnóstico.
-//   C1: excepciones contenidas, trazadas y terminales (plan/verify/etc.)
-//   C2: ejecución sin trabajo → block inmediato, nunca maxCycles
-//   C3: planning/execution/verification exigen decisión "approved"
+// Autonomy Loop Hardening — C1/C2/C3 fixes from the diagnosis.
+//   C1: exceptions contained, traced and terminal (plan/verify/etc.)
+//   C2: execution without work → immediate block, never maxCycles
+//   C3: planning/execution/verification require an "approved" decision
 //   npx tsx tests/autonomy-hardening-test.ts
 import { ProjectStateManager } from "../src/core/project-state/manager.js";
 import { StrategicAnalysisService } from "../src/core/strategy/service.js";
@@ -56,35 +56,35 @@ function build(agent: Agent, verifier?: TaskVerifier) {
 async function analyzedProject(strategicService: StrategicAnalysisService) {
   const r = await strategicService.analyze({
     projectName: "Hardening Test",
-    prompt: "Proyecto para probar el hardening del loop."
+    prompt: "Project to test loop hardening."
   });
   return r.project;
 }
 
 console.log("\nAutonomy Loop — hardening (C1/C2/C3)\n");
 
-// C1a — excepción durante planning: contenida, trazada, proyecto pausado.
-await t("C1: excepción en plan() → block trazado + paused (no crash)", async () => {
+// C1a — exception during planning: contained, traced, project paused.
+await t("C1: exception in plan() → traced block + paused (no crash)", async () => {
   const agent = new TraceAgent();
   const { stateManager, strategicService, approvalGate, engine } = build(agent);
   const project = await analyzedProject(strategicService);
   approvalGate.approve(project.id);
-  // Blueprint eliminado tras aprobación → plan() lanza.
+  // Blueprint removed after approval → plan() throws.
   stateManager.setMetadata(project.id, "strategicBlueprint", undefined);
   const run = await engine.run(project.id);
   assert(run.stoppedReason === "paused" || run.stoppedReason === "blocked",
-    `esperaba paused/blocked, llegó ${run.stoppedReason}`);
+    `expected paused/blocked, got ${run.stoppedReason}`);
   const p = stateManager.getProject(project.id);
-  assert(p.status === "paused", `proyecto no pausado: ${p.status}`);
+  assert(p.status === "paused", `project not paused: ${p.status}`);
   const last = (p.autonomyTrace ?? []).at(-1);
   assert(last?.action === "block" && last.outcome === "error",
-    `trace final incorrecto: ${JSON.stringify(last)}`);
-  assert(/blueprint/i.test(last!.reason), "la razón no conserva el mensaje del error");
-  assert(agent.receivedTasks.length === 0, "se ejecutaron tareas tras el error");
+    `incorrect final trace: ${JSON.stringify(last)}`);
+  assert(/blueprint/i.test(last!.reason), "the reason does not preserve the error message");
+  assert(agent.receivedTasks.length === 0, "tasks were executed after the error");
 });
 
-// C1b — TaskVerifier que lanza → contenido, trazado, terminal.
-await t("C1: TaskVerifier que lanza → block trazado + paused", async () => {
+// C1b — throwing TaskVerifier → contained, traced, terminal.
+await t("C1: throwing TaskVerifier → traced block + paused", async () => {
   const agent = new TraceAgent();
   const { stateManager, engine, approvalGate, strategicService } =
     build(agent, new ExplodingVerifier());
@@ -92,72 +92,72 @@ await t("C1: TaskVerifier que lanza → block trazado + paused", async () => {
   approvalGate.approve(project.id);
   const run = await engine.run(project.id);
   assert(run.stoppedReason === "paused" || run.stoppedReason === "blocked",
-    `esperaba paused/blocked, llegó ${run.stoppedReason}`);
+    `expected paused/blocked, got ${run.stoppedReason}`);
   const p = stateManager.getProject(project.id);
-  assert(p.status === "paused", `proyecto no pausado: ${p.status}`);
+  assert(p.status === "paused", `project not paused: ${p.status}`);
   const last = (p.autonomyTrace ?? []).at(-1);
   assert(last?.action === "block" && last.outcome === "error" &&
     last.phaseFrom === "verification",
-    `trace final incorrecto: ${JSON.stringify(last)}`);
-  // El siguiente run() no repite la operación fallida.
+    `incorrect final trace: ${JSON.stringify(last)}`);
+  // The next run() does not repeat the failed operation.
   const run2 = await engine.run(project.id);
   assert(run2.cycles === 1 && run2.stoppedReason === "paused",
-    "run() sobre proyecto pausado no terminó en 1 ciclo");
+    "run() on a paused project did not finish in 1 cycle");
 });
 
-// C2 — execution+running sin tareas → block inmediato, no max_cycles.
-await t("C2: ejecución sin tareas → block inmediato", async () => {
+// C2 — execution+running with no tasks → immediate block, not max_cycles.
+await t("C2: execution with no tasks → immediate block", async () => {
   const agent = new TraceAgent();
   const { stateManager, strategicService, approvalGate, engine } = build(agent);
   const project = await analyzedProject(strategicService);
   approvalGate.approve(project.id);
-  // Forzar execution vacío (simula plan vacío): sin pasar por plan().
+  // Force empty execution (simulates an empty plan): bypassing plan().
   stateManager.updatePhase(project.id, "execution");
   const run = await engine.run(project.id, { maxCycles: 50 });
-  assert(run.cycles === 1, `debía bloquear en 1 ciclo, llegó ${run.cycles}`);
+  assert(run.cycles === 1, `should have blocked in 1 cycle, got ${run.cycles}`);
   assert(run.stoppedReason === "paused" || run.stoppedReason === "blocked",
-    `esperaba paused/blocked, llegó ${run.stoppedReason}`);
+    `expected paused/blocked, got ${run.stoppedReason}`);
   assert(stateManager.getProject(project.id).status === "paused",
-    "proyecto no quedó paused");
+    "project did not end up paused");
   const last = (stateManager.getProject(project.id).autonomyTrace ?? []).at(-1);
   assert(last?.action === "block" && /no work|deadlock/i.test(last.reason),
-    `razón inesperada: ${last?.reason}`);
+    `unexpected reason: ${last?.reason}`);
 });
 
-// C3 — planning+running forzado sin aprobación → bloqueado, nada ejecuta.
-await t("C3: planning+running sin decisión approved → bloqueo", async () => {
+// C3 — forced planning+running without approval → blocked, nothing runs.
+await t("C3: planning+running without approved decision → block", async () => {
   const agent = new TraceAgent();
   const { stateManager, strategicService, engine } = build(agent);
   const project = await analyzedProject(strategicService);
-  // Bypass directo del gate: nadie llamó approve().
+  // Direct gate bypass: approve() was never called.
   stateManager.updatePhase(project.id, "planning");
   stateManager.updateStatus(project.id, "running");
   const run = await engine.run(project.id);
-  assert(run.cycles === 1, `debía bloquear en 1 ciclo, llegó ${run.cycles}`);
+  assert(run.cycles === 1, `should have blocked in 1 cycle, got ${run.cycles}`);
   const p = stateManager.getProject(project.id);
-  assert(p.status === "paused", `proyecto no pausado: ${p.status}`);
-  assert(p.tasks.length === 0, "se planificaron tareas sin aprobación");
-  assert(agent.receivedTasks.length === 0, "se ejecutaron tareas sin aprobación");
+  assert(p.status === "paused", `project not paused: ${p.status}`);
+  assert(p.tasks.length === 0, "tasks were planned without approval");
+  assert(agent.receivedTasks.length === 0, "tasks were executed without approval");
   const last = (p.autonomyTrace ?? []).at(-1);
   assert(last?.action === "block" && /approval/i.test(last.reason),
-    `razón inesperada: ${last?.reason}`);
+    `unexpected reason: ${last?.reason}`);
 });
 
-// C3b — execution forzado sin aprobación → igualmente bloqueado.
-await t("C3: execution+running sin decisión approved → bloqueo", async () => {
+// C3b — forced execution without approval → equally blocked.
+await t("C3: execution+running without approved decision → block", async () => {
   const agent = new TraceAgent();
   const { stateManager, strategicService, engine } = build(agent);
   const project = await analyzedProject(strategicService);
   stateManager.updatePhase(project.id, "execution");
   stateManager.updateStatus(project.id, "running");
   const run = await engine.run(project.id);
-  assert(run.cycles === 1, `debía bloquear en 1 ciclo, llegó ${run.cycles}`);
-  assert(agent.receivedTasks.length === 0, "se ejecutaron tareas sin aprobación");
-  assert(stateManager.getProject(project.id).status === "paused", "proyecto no pausado");
+  assert(run.cycles === 1, `should have blocked in 1 cycle, got ${run.cycles}`);
+  assert(agent.receivedTasks.length === 0, "tasks were executed without approval");
+  assert(stateManager.getProject(project.id).status === "paused", "project not paused");
 });
 
-// Extra — equivalencia run() ≈ N×step(): mismas decisiones, mismo estado.
-await t("run() ≡ secuencia de step()", async () => {
+// Extra — run() ≈ N×step() equivalence: same decisions, same state.
+await t("run() ≡ sequence of step()", async () => {
   const a1 = new TraceAgent();
   const s1 = build(a1);
   const p1 = await analyzedProject(s1.strategicService);
@@ -175,16 +175,16 @@ await t("run() ≡ secuencia de step()", async () => {
     decisions.push(step.decision);
   } while (!step.terminal);
 
-  assert(run.stoppedReason === "completed", `run() no completó: ${run.stoppedReason}`);
+  assert(run.stoppedReason === "completed", `run() did not complete: ${run.stoppedReason}`);
   assert(run.decisions.join() === decisions.join(),
-    `decisiones difieren: ${run.decisions} vs ${decisions}`);
+    `decisions differ: ${run.decisions} vs ${decisions}`);
   assert(s2.stateManager.getProject(p2.id).phase === "completed",
-    "step() manual no completó el proyecto");
+    "manual step() did not complete the project");
 });
 
-// Extra — verification failure → repair → sin progreso → paused
-// persistente (post-Repair MVP el proyecto ya no termina en failed aquí).
-await t("verificación sin progreso → paused persistente en runs sucesivos", async () => {
+// Extra — verification failure → repair → no progress → persistently
+// paused (post-Repair MVP the project no longer ends in failed here).
+await t("verification without progress → persistently paused across runs", async () => {
   const failVerifier: TaskVerifier = {
     verifyTask: (task: { id: string }) => ({
       taskId: task.id, passed: false, findings: ["rejected"]
@@ -197,18 +197,18 @@ await t("verificación sin progreso → paused persistente en runs sucesivos", a
   approvalGate.approve(project.id);
   const run1 = await engine.run(project.id);
   assert(run1.stoppedReason === "paused" || run1.stoppedReason === "blocked",
-    `esperaba paused/blocked, llegó ${run1.stoppedReason}`);
+    `expected paused/blocked, got ${run1.stoppedReason}`);
   const p = stateManager.getProject(project.id);
-  assert(p.status === "paused", `proyecto no quedó paused: ${p.status}`);
+  assert(p.status === "paused", `project did not end up paused: ${p.status}`);
   const executions = agent.receivedTasks.length;
   const run2 = await engine.run(project.id);
   assert(run2.cycles === 1 && run2.stoppedReason === "paused",
-    "run() sobre paused no terminó en 1 ciclo");
-  assert(agent.receivedTasks.length === executions, "se re-ejecutó tras bloqueo");
+    "run() on paused did not finish in 1 cycle");
+  assert(agent.receivedTasks.length === executions, "re-executed after blocking");
 });
 
-// Extra — trazabilidad completa en wait y block.
-await t("trazabilidad completa en decisiones wait/block", async () => {
+// Extra — full traceability in wait and block.
+await t("full traceability in wait/block decisions", async () => {
   const { stateManager, strategicService, engine } = build(new TraceAgent());
   const project = await analyzedProject(strategicService);
   await engine.run(project.id); // wait terminal
@@ -216,7 +216,7 @@ await t("trazabilidad completa en decisiones wait/block", async () => {
   assert(waitTrace && waitTrace.cycle === 1 && waitTrace.action === "wait" &&
     waitTrace.phaseFrom === "approval" && waitTrace.phaseTo === "approval" &&
     waitTrace.reason && waitTrace.at,
-    `trace wait incompleto: ${JSON.stringify(waitTrace)}`);
+    `incomplete wait trace: ${JSON.stringify(waitTrace)}`);
 });
 
 console.log(`\n${ok} PASSED · ${fail} FAILED\n`);

@@ -1,6 +1,6 @@
-// Autonomy Loop Engine — FASE loop MVP.
-// Cubre: gate nunca salteado, transiciones válidas, retry con límite,
-// dependencias, verificación antes de completar, maxCycles, trazabilidad.
+// Autonomy Loop Engine — loop phase MVP.
+// Covers: gate never skipped, valid transitions, bounded retry,
+// dependencies, verification before completion, maxCycles, traceability.
 //   npx tsx tests/autonomy-loop-test.ts
 import { ProjectStateManager } from "../src/core/project-state/manager.js";
 import { StrategicAnalysisService } from "../src/core/strategy/service.js";
@@ -35,7 +35,7 @@ function t(nombre: string, fn: () => void | Promise<void>) {
 }
 const assert = (c: unknown, m: string) => { if (!c) throw new Error(m); };
 
-// Agente que falla siempre — para probar el agotamiento de maxRetries.
+// Agent that always fails — to test maxRetries exhaustion.
 class AlwaysFailAgent implements Agent {
   readonly id = "always-fail-agent";
   readonly name = "Always Fail Agent";
@@ -51,7 +51,7 @@ class AlwaysFailAgent implements Agent {
     this.executions++;
     return {
       success: false,
-      summary: `Fallo permanente en "${task.title}".`,
+      summary: `Permanent failure in "${task.title}".`,
       outputs: {},
       artifacts: [],
       issues: ["permanent failure"]
@@ -85,7 +85,7 @@ function build(agent: Agent, verifier?: TaskVerifier) {
 async function analyzedProject(strategicService: StrategicAnalysisService) {
   const r = await strategicService.analyze({
     projectName: "Autonomy Test",
-    prompt: "Construir una app de prueba para el loop autónomo."
+    prompt: "Build a test app for the autonomous loop."
   });
   return r.project;
 }
@@ -93,65 +93,65 @@ async function analyzedProject(strategicService: StrategicAnalysisService) {
 async function approvedProject(agent: Agent, verifier?: TaskVerifier) {
   const sys = build(agent, verifier);
   const project = await analyzedProject(sys.strategicService);
-  sys.approvalGate.approve(project.id, "aprobado en test");
+  sys.approvalGate.approve(project.id, "approved in test");
   return { ...sys, project };
 }
 
-console.log("\nAutonomy Loop Engine — pruebas\n");
+console.log("\nAutonomy Loop Engine — tests\n");
 
-// 1. Proyecto no aprobado → el loop se detiene limpiamente, nada ejecuta.
-await t("proyecto no aprobado → wait limpio, sin ejecución", async () => {
+// 1. Unapproved project → the loop stops cleanly, nothing executes.
+await t("unapproved project → clean wait, no execution", async () => {
   const sys = build(new TraceAgent());
   const project = await analyzedProject(sys.strategicService);
   const run = await sys.engine.run(project.id);
-  assert(run.stoppedReason === "awaiting_approval", `esperaba awaiting_approval, llegó ${run.stoppedReason}`);
-  assert(run.cycles === 1, `esperaba 1 ciclo, llegó ${run.cycles}`);
+  assert(run.stoppedReason === "awaiting_approval", `expected awaiting_approval, got ${run.stoppedReason}`);
+  assert(run.cycles === 1, `expected 1 cycle, got ${run.cycles}`);
   const p = sys.stateManager.getProject(project.id);
-  assert(p.phase === "approval" && p.status === "awaiting_approval", "el loop alteró el estado de aprobación");
-  assert(p.tasks.length === 0, "se planificaron tareas sin aprobación");
+  assert(p.phase === "approval" && p.status === "awaiting_approval", "the loop altered the approval state");
+  assert(p.tasks.length === 0, "tasks were planned without approval");
 });
 
-// 2+3. Aprobado → planea, ejecuta, verifica, completa; decisiones correctas.
-await t("aprobado → ANALYZE→APPROVE→PLAN→EXECUTE→VERIFY→COMPLETE", async () => {
+// 2+3. Approved → plans, executes, verifies, completes; correct decisions.
+await t("approved → ANALYZE→APPROVE→PLAN→EXECUTE→VERIFY→COMPLETE", async () => {
   const { engine, stateManager, project } = await approvedProject(new TraceAgent());
   const run = await engine.run(project.id);
-  assert(run.stoppedReason === "completed", `esperaba completed, llegó ${run.stoppedReason}`);
+  assert(run.stoppedReason === "completed", `expected completed, got ${run.stoppedReason}`);
   const p = stateManager.getProject(project.id);
-  assert(p.phase === "completed" && p.status === "completed", `fase final incorrecta: ${p.phase}/${p.status}`);
-  assert(p.tasks.every(task => task.status === "completed"), "hay tareas sin completar");
-  assert(run.decisions.every(d => d !== "retry" && d !== "fail"), `decisiones inesperadas: ${run.decisions}`);
+  assert(p.phase === "completed" && p.status === "completed", `incorrect final phase: ${p.phase}/${p.status}`);
+  assert(p.tasks.every(task => task.status === "completed"), "there are uncompleted tasks");
+  assert(run.decisions.every(d => d !== "retry" && d !== "fail"), `unexpected decisions: ${run.decisions}`);
 });
 
-// 4. Fallo → retry explícito, la tarea acaba completada.
-await t("fallo de tarea → retry hasta éxito", async () => {
-  const failAgent = new FailureRetryAgent(); // falla la 1ª, éxito la 2ª
+// 4. Failure → explicit retry, the task ends up completed.
+await t("task failure → retry until success", async () => {
+  const failAgent = new FailureRetryAgent(); // fails the 1st, succeeds the 2nd
   const { engine, stateManager, project } = await approvedProject(failAgent);
   const run = await engine.run(project.id);
-  assert(run.stoppedReason === "completed", `esperaba completed, llegó ${run.stoppedReason}`);
-  assert(run.decisions.includes("retry"), `no hubo decisión retry: ${run.decisions}`);
+  assert(run.stoppedReason === "completed", `expected completed, got ${run.stoppedReason}`);
+  assert(run.decisions.includes("retry"), `no retry decision: ${run.decisions}`);
   const retried = stateManager.getProject(project.id).tasks.find(task => task.retryCount > 0);
-  assert(retried && retried.status === "completed" && retried.retryCount === 1, "el retry no quedó correctamente registrado");
-  assert(failAgent.receivedTasks.length === 8 + 1, `esperaba 9 ejecuciones (8 tareas + 1 retry), hubo ${failAgent.receivedTasks.length}`);
+  assert(retried && retried.status === "completed" && retried.retryCount === 1, "the retry was not recorded correctly");
+  assert(failAgent.receivedTasks.length === 8 + 1, `expected 9 executions (8 tasks + 1 retry), got ${failAgent.receivedTasks.length}`);
 });
 
-// 5. Retry agotado → blocked + paused, sin loop infinito.
-await t("retry agotado → tarea blocked, proyecto paused (sin loop infinito)", async () => {
+// 5. Exhausted retry → blocked + paused, no infinite loop.
+await t("retry exhausted → task blocked, project paused (no infinite loop)", async () => {
   const agent = new AlwaysFailAgent();
   const { engine, stateManager, project } = await approvedProject(agent);
   const run = await engine.run(project.id, { maxCycles: 50 });
-  assert(run.stoppedReason === "paused" || run.stoppedReason === "blocked", `esperaba paused/blocked, llegó ${run.stoppedReason}`);
+  assert(run.stoppedReason === "paused" || run.stoppedReason === "blocked", `expected paused/blocked, got ${run.stoppedReason}`);
   const p = stateManager.getProject(project.id);
-  assert(p.status === "paused", `proyecto no quedó paused: ${p.status}`);
+  assert(p.status === "paused", `project did not end up paused: ${p.status}`);
   const task = p.tasks.find(x => x.status === "blocked");
-  assert(task, "ninguna tarea quedó blocked");
+  assert(task, "no task ended up blocked");
   assert(task!.retryCount === task!.maxRetries, `retryCount=${task!.retryCount} ≠ maxRetries=${task!.maxRetries}`);
   assert(task!.attempts === 1 + task!.maxRetries, `attempts=${task!.attempts} ≠ 1+maxRetries`);
-  assert(agent.executions === 1 + task!.maxRetries, `el agente se ejecutó ${agent.executions} veces, esperaba ${1 + task!.maxRetries}`);
-  assert(run.cycles <= 10, `demasiados ciclos: ${run.cycles}`);
+  assert(agent.executions === 1 + task!.maxRetries, `the agent ran ${agent.executions} times, expected ${1 + task!.maxRetries}`);
+  assert(run.cycles <= 10, `too many cycles: ${run.cycles}`);
 });
 
-// 6. Dependencias respetadas dentro del loop.
-await t("dependencias respetadas durante el loop", async () => {
+// 6. Dependencies respected inside the loop.
+await t("dependencies respected during the loop", async () => {
   const agent = new TraceAgent();
   const { engine, stateManager, project } = await approvedProject(agent);
   await engine.run(project.id);
@@ -160,60 +160,60 @@ await t("dependencias respetadas durante el loop", async () => {
   for (const task of p.tasks) {
     for (const dep of task.dependsOn) {
       assert(order.indexOf(dep) !== -1 && order.indexOf(dep) < order.indexOf(task.id),
-        `tarea ${task.id} ejecutó antes de su dependencia ${dep}`);
+        `task ${task.id} ran before its dependency ${dep}`);
     }
   }
 });
 
-// 7+8. Verificación fallida → repair (MVP) → sin progreso → paused,
-// nunca completed; verificación OK → completed.
-await t("verificación fallida → repair sin progreso → paused, nunca completed", async () => {
+// 7+8. Failed verification → repair (MVP) → no progress → paused,
+// never completed; successful verification → completed.
+await t("failed verification → repair without progress → paused, never completed", async () => {
   const { engine, stateManager, project } = await approvedProject(new TraceAgent(), new FailVerifier());
   const run = await engine.run(project.id);
-  // Repair MVP: findings atribuibles → repair → misma signature →
-  // noProgress → block + paused. Ya NO termina en failed directo.
+  // Repair MVP: attributable findings → repair → same signature →
+  // noProgress → block + paused. It NO LONGER ends in failed directly.
   assert(run.stoppedReason === "paused" || run.stoppedReason === "blocked",
-    `esperaba paused/blocked, llegó ${run.stoppedReason}`);
+    `expected paused/blocked, got ${run.stoppedReason}`);
   const p = stateManager.getProject(project.id);
   assert(p.status === "paused" && p.phase !== "completed",
-    `estado final incorrecto: ${p.phase}/${p.status}`);
-  assert(run.decisions.includes("repair"), `no hubo decisión repair: ${run.decisions}`);
+    `incorrect final state: ${p.phase}/${p.status}`);
+  assert(run.decisions.includes("repair"), `no repair decision: ${run.decisions}`);
 });
 
-// 9. maxCycles acota el loop.
-await t("run con maxCycles=1 → stoppedReason max_cycles", async () => {
+// 9. maxCycles bounds the loop.
+await t("run with maxCycles=1 → stoppedReason max_cycles", async () => {
   const { engine, stateManager, project } = await approvedProject(new TraceAgent());
   const run = await engine.run(project.id, { maxCycles: 1 });
-  assert(run.cycles === 1 && run.stoppedReason === "max_cycles", `esperaba max_cycles en 1 ciclo, llegó ${run.stoppedReason}`);
-  assert(stateManager.getProject(project.id).phase === "execution", "la fase no avanzó a execution tras el ciclo de planning");
+  assert(run.cycles === 1 && run.stoppedReason === "max_cycles", `expected max_cycles in 1 cycle, got ${run.stoppedReason}`);
+  assert(stateManager.getProject(project.id).phase === "execution", "the phase did not advance to execution after the planning cycle");
 });
 
-// 10. Trazabilidad: cada ciclo registrado con fase, acción, razón y timestamp.
-await t("autonomyTrace persiste ciclo/fases/decisión/agente/intento", async () => {
+// 10. Traceability: every cycle recorded with phase, action, reason and timestamp.
+await t("autonomyTrace persists cycle/phases/decision/agent/attempt", async () => {
   const agent = new FailureRetryAgent();
   const { engine, stateManager, project } = await approvedProject(agent);
   await engine.run(project.id);
   const trace = stateManager.getProject(project.id).autonomyTrace ?? [];
-  assert(trace.length >= 4, `trazabilidad insuficiente: ${trace.length} entradas`);
+  assert(trace.length >= 4, `insufficient traceability: ${trace.length} entries`);
   trace.forEach((entry, i) => {
     assert(entry.cycle === i + 1, `cycle ${entry.cycle} ≠ ${i + 1}`);
-    assert(entry.phaseFrom && entry.phaseTo && entry.action && entry.reason && entry.at, `entrada ${i} incompleta`);
+    assert(entry.phaseFrom && entry.phaseTo && entry.action && entry.reason && entry.at, `entry ${i} incomplete`);
   });
   const retryEntry = trace.find(e => e.action === "retry");
-  assert(retryEntry?.taskId && retryEntry?.agentId && retryEntry?.attempt === 2, "la entrada retry no enlaza tarea/agente/intento");
-  assert(trace[trace.length - 1].action === "complete", "el último ciclo no es 'complete'");
+  assert(retryEntry?.taskId && retryEntry?.agentId && retryEntry?.attempt === 2, "the retry entry does not link task/agent/attempt");
+  assert(trace[trace.length - 1].action === "complete", "the last cycle is not 'complete'");
 });
 
-// 11. Proyecto completado → run() no re-ejecuta nada.
-await t("proyecto completed → terminal inmediato, sin re-ejecución", async () => {
+// 11. Completed project → run() re-executes nothing.
+await t("completed project → immediate terminal, no re-execution", async () => {
   const agent = new TraceAgent();
   const { engine, stateManager, project } = await approvedProject(agent);
   const first = await engine.run(project.id);
-  assert(first.stoppedReason === "completed", `setup falló: ${first.stoppedReason}`);
+  assert(first.stoppedReason === "completed", `setup failed: ${first.stoppedReason}`);
   const executions = agent.receivedTasks.length;
   const second = await engine.run(project.id);
-  assert(second.stoppedReason === "completed" && second.cycles === 1, "run() sobre completado no terminó en 1 ciclo");
-  assert(agent.receivedTasks.length === executions, "se re-ejecutaron tareas en un proyecto completado");
+  assert(second.stoppedReason === "completed" && second.cycles === 1, "run() on completed did not finish in 1 cycle");
+  assert(agent.receivedTasks.length === executions, "tasks were re-executed on a completed project");
   void stateManager;
 });
 

@@ -1,28 +1,28 @@
-// Replan Engine MVP — contratos. Independiente de Planner/PlanningService:
-// el replan es un mecanismo correctivo ADITIVO — jamás toca tareas
-// existentes ni el blueprint original.
+// Replan Engine MVP — contracts. Independent of Planner/PlanningService:
+// replanning is an ADDITIVE corrective mechanism — it never touches
+// existing tasks or the original blueprint.
 
-/** Finding clasificado como plan_invalid que motiva el replan. */
+/** Finding classified as plan_invalid that motivates the replan. */
 export interface ReplanFinding {
-  /** Tarea de la que surge el finding; undefined si es global. */
+  /** Task the finding originates from; undefined when global. */
   taskId?: string;
   finding: string;
 }
 
 export interface ReplanRequest {
   projectId: string;
-  /** Findings plan_invalid que invalidan el plan vigente. */
+  /** plan_invalid findings that invalidate the current plan. */
   failedFindings: ReplanFinding[];
-  /** IDs de tareas completed — preservadas, nunca reabiertas. */
+  /** IDs of completed tasks — preserved, never reopened. */
   preservedTaskIds: string[];
-  /** Número de ciclo de replanificación (1 = primer replan). */
+  /** Replan cycle number (1 = first replan). */
   replanCycle: number;
   reason: string;
 }
 
 export interface ReplanResult {
   success: boolean;
-  /** IDs de las tareas correctivas insertadas. */
+  /** IDs of the inserted corrective tasks. */
   addedTaskIds: string[];
   reason: string;
 }

@@ -20,7 +20,7 @@ export class StrategicAnalysisService {
     request: StrategicAnalysisRequest
   ): Promise<StrategicAnalysisResult> {
     const project = this.stateManager.createProject({
-      name: request.projectName?.trim() || "Proyecto sin nombre",
+      name: request.projectName?.trim() || "Unnamed project",
       objective: request.prompt,
       originalPrompt: request.prompt,
       constraints: request.additionalContext ?? []

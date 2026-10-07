@@ -1,15 +1,15 @@
-// Repair Engine MVP — contratos. Independiente de project-state (sin
-// ciclos de imports): los tipos referencian IDs/strings solamente.
+// Repair Engine MVP — contracts. Independent of project-state (no
+// import cycles): the types reference IDs/strings only.
 import type { VerificationReport } from "../verification/contracts.js";
 import type { ProjectState } from "../project-state/types.js";
 
-/** Contexto que recibe la tarea reabierta para reparación. */
+/** Context received by a task reopened for repair. */
 export interface RepairContext {
-  /** Findings de la verificación que provocaron la reparación. */
+  /** Verification findings that triggered the repair. */
   failedFindings: string[];
-  /** Número de ciclo de reparación (1 = primera reparación). */
+  /** Repair cycle number (1 = first repair). */
   repairCycle: number;
-  /** Resúmenes de intentos previos para que el agente no repita el fallo. */
+  /** Summaries of previous attempts so the agent does not repeat the failure. */
   previousAttemptSummaries: string[];
   reason: string;
 }
@@ -18,11 +18,11 @@ export type RepairDecision = "repair" | "replan" | "block" | "fail";
 
 export interface RepairAssessment {
   decision: RepairDecision;
-  /** Tareas concretas a reparar; vacío si decision !== "repair". */
+  /** Concrete tasks to repair; empty when decision !== "repair". */
   taskIds: string[];
   reason: string;
-  /** true cuando los findings son idénticos a los del ciclo anterior —
-   *  la reparación anterior no produjo progreso. */
+  /** true when the findings are identical to the previous cycle's —
+   *  the previous repair produced no progress. */
   noProgress?: boolean;
 }
 
@@ -31,10 +31,10 @@ export interface RepairAssessmentInput {
   project: ProjectState;
   repairCount: number;
   maxRepairs: number;
-  /** Presupuesto de replanificación (independiente de repair). */
+  /** Replan budget (independent of repair). */
   replanCount?: number;
   maxReplans?: number;
-  /** Signature de findings del ciclo anterior (metadata.lastFindingsSignature). */
+  /** Findings signature from the previous cycle (metadata.lastFindingsSignature). */
   previousSignature?: string;
 }
 

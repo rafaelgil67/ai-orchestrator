@@ -7,10 +7,10 @@ import {
 } from "./contracts.js";
 
 /**
- * Verificador por defecto: una tarea pasa si terminó "completed" con un
- * AgentResult exitoso y sin issues reportados. Es deliberadamente
- * conservador — puede sustituirse por un agente QA real inyectando otro
- * TaskVerifier sin tocar el servicio ni el engine.
+ * Default verifier: a task passes if it finished "completed" with a
+ * successful AgentResult and no reported issues. Deliberately
+ * conservative — it can be replaced by a real QA agent by injecting
+ * another TaskVerifier without touching the service or the engine.
  */
 class DefaultTaskVerifier implements TaskVerifier {
   verifyTask(task: ProjectTask): TaskVerification {

@@ -32,24 +32,26 @@ import { DefaultReplanService } from "../replanning/replan-service.js";
 const DEFAULT_MAX_CYCLES = 50;
 
 /**
- * Autonomy Loop Engine — motor de control del ciclo de vida del proyecto.
+ * Autonomy Loop Engine — project lifecycle control engine.
  *
  *   ANALYZE → APPROVE → PLAN → EXECUTE → VERIFY → DECIDE → …
  *
- * step() ejecuta exactamente UNA transición válida según la fase/estado
- * actuales; run() itera step() hasta una decisión terminal o maxCycles.
+ * step() performs exactly ONE valid transition according to the current
+ * phase/status; run() iterates step() until a terminal decision or
+ * maxCycles.
  *
- * Reglas duras:
- *   · jamás auto-aprueba: un proyecto en awaiting_approval detiene el loop
- *     limpiamente (decisión "wait") — el Approval Gate no se salta;
- *   · nunca ejecuta fuera de las fases válidas ni sobre proyectos
- *     terminales (completed/failed);
- *   · un retry solo se pide si retryCount < maxRetries; al agotarse, la
- *     tarea queda "blocked" y el proyecto "paused" (intervención humana);
- *   · "verification" se ejecuta antes de cualquier "completed";
- *   · "deployment" queda fuera del MVP: fase terminal bloqueada;
- *   · cada paso queda en project.autonomyTrace (integra datos de
- *     attemptHistory: taskId, agentId, attempt).
+ * Hard rules:
+ *   · never auto-approves: a project in awaiting_approval stops the loop
+ *     cleanly ("wait" decision) — the Approval Gate is never skipped;
+ *   · never executes outside valid phases or on terminal projects
+ *     (completed/failed);
+ *   · a retry is only requested while retryCount < maxRetries; when
+ *     exhausted, the task becomes "blocked" and the project "paused"
+ *     (human intervention);
+ *   · "verification" runs before any "completed";
+ *   · "deployment" is out of the MVP scope: blocked terminal phase;
+ *   · every step lands in project.autonomyTrace (integrated with
+ *     attemptHistory data: taskId, agentId, attempt).
  */
 export class AutonomyLoopEngine {
   constructor(
@@ -102,7 +104,7 @@ export class AutonomyLoopEngine {
       };
     };
 
-    // ---- Estados terminales: nunca reanudar sin autorización ----
+    // ---- Terminal states: never resume without authorization ----
     if (project.status === "completed") {
       return finish("complete", true, "noop", "Project already completed.");
     }
@@ -110,31 +112,31 @@ export class AutonomyLoopEngine {
       return finish("fail", true, "noop", "Project is failed; resume requires human authorization.");
     }
 
-    // ---- Approval Gate: NUNCA se salta ----
+    // ---- Approval Gate: NEVER skipped ----
     if (project.phase === "approval" || project.status === "awaiting_approval") {
       return finish("wait", true, "stopped", "Project is awaiting human approval; loop stopped cleanly.");
     }
 
-    // ---- Pausa/revisión: intervención humana requerida ----
+    // ---- Pause/revision: human intervention required ----
     if (project.status === "paused" || project.phase === "revision") {
       return finish("block", true, "stopped", "Project is paused or awaiting revision; human intervention required.");
     }
 
-    // ---- ANALYZE ocurrió fuera del loop (crea el proyecto). Un proyecto
-    // aún en discovery no tiene diagnóstico: no se puede planificar ----
+    // ---- ANALYZE happens outside the loop (it creates the project). A
+    // project still in discovery has no diagnosis: it cannot be planned ----
     if (project.phase === "discovery" || project.phase === "diagnosis") {
       return finish("block", true, "stopped", `Project requires strategic analysis before the loop can drive it (phase: ${project.phase}).`);
     }
 
-    // ---- deployment fuera del MVP ----
+    // ---- deployment is out of the MVP ----
     if (project.phase === "deployment") {
       return finish("block", true, "stopped", "Deployment phase is out of scope for the autonomy MVP.");
     }
 
-    // ---- C3: el Approval Gate se verifica, no se infiere. Entrar en
-    // planning/execution/verification exige una decisión "approved" en
-    // decisions[] — un estado forzado por updatePhase()/updateStatus()
-    // sin aprobación queda bloqueado y pausado, jamás ejecutado ----
+    // ---- C3: the Approval Gate is verified, not inferred. Entering
+    // planning/execution/verification requires an "approved" decision in
+    // decisions[] — a state forced via updatePhase()/updateStatus()
+    // without approval is blocked and paused, never executed ----
     if (
       (project.phase === "planning" ||
         project.phase === "execution" ||
@@ -207,9 +209,9 @@ export class AutonomyLoopEngine {
           return finish("complete", true, "completed", outcome.reason);
         }
 
-        // Recovery Engine: un fail de verificación evalúa repair →
-        // replan → block antes de fallar. Conservador: ante la duda
-        // → block (paused). M4: counters saneados defensivamente.
+        // Recovery Engine: a verification failure evaluates repair →
+        // replan → block before failing. Conservative: when in doubt
+        // → block (paused). M4: counters defensively sanitized.
         const repairCount = Number.isFinite(
           Number(project.metadata.repairCount)
         )
@@ -243,8 +245,8 @@ export class AutonomyLoopEngine {
           previousSignature
         });
 
-        // Registrar signature SIEMPRE — la detección de no-progreso
-        // depende de compararla en el siguiente ciclo de verificación.
+        // Always record the signature — no-progress detection depends
+        // on comparing it in the next verification cycle.
         this.stateManager.setMetadata(
           projectId,
           "lastFindingsSignature",
@@ -252,9 +254,9 @@ export class AutonomyLoopEngine {
         );
 
         if (assessment.decision === "repair") {
-          // Reabrir SOLO las tareas afectadas: status "ready" +
-          // repairContext. attemptHistory y retryCount se conservan
-          // intactos; las tareas completadas sin findings no se tocan.
+          // Reopen ONLY the affected tasks: status "ready" +
+          // repairContext. attemptHistory and retryCount are kept
+          // intact; completed tasks without findings are untouched.
           const repairCycle = repairCount + 1;
           for (const taskId of assessment.taskIds) {
             const task = project.tasks.find(
@@ -280,8 +282,8 @@ export class AutonomyLoopEngine {
             repairCycle
           );
           this.stateManager.updatePhase(projectId, "execution");
-          // M1 — el reason conserva TODOS los taskIds afectados, no
-          // solo el primero registrado en trace.taskId.
+          // M1 — the reason keeps ALL affected taskIds, not just the
+          // first one recorded in trace.taskId.
           return finish(
             "repair",
             false,
@@ -292,9 +294,9 @@ export class AutonomyLoopEngine {
           );
         }
 
-        // ---- REPLAN: el plan vigente es inválido; se insertan tareas
-        // correctivas aditivas. Las completed NUNCA se tocan; los deps
-        // de las nuevas solo apuntan a tareas existentes ----
+        // ---- REPLAN: the current plan is invalid; additive corrective
+        // tasks are inserted. Completed tasks are NEVER touched; the new
+        // tasks' deps only point to existing tasks ----
         if (assessment.decision === "replan") {
           const planInvalidFindings = report.taskVerifications
             .filter(v => !v.passed && v.kind === "plan_invalid")
@@ -349,15 +351,15 @@ export class AutonomyLoopEngine {
 
       return finish("block", true, "stopped", `Unhandled phase/status combination: ${project.phase}/${project.status}.`);
     } catch (error) {
-      // C1 — contención: cualquier excepción de plan/schedule/retry/verify
-      // queda trazada, pausa el proyecto y termina el ciclo — el error no
-      // se oculta y el siguiente run() no repite la operación fallida.
+      // C1 — containment: any exception from plan/schedule/retry/verify
+      // is traced, pauses the project and ends the cycle — the error is
+      // not hidden and the next run() does not repeat the failed op.
       const reason =
         error instanceof Error ? error.message : String(error);
       try {
         this.stateManager.updateStatus(projectId, "paused");
       } catch {
-        // si ni siquiera el estado puede actualizarse, el trace lo registra igualmente
+        // if even the status cannot be updated, the trace still records it
       }
       return finish(
         "block",
@@ -373,7 +375,7 @@ export class AutonomyLoopEngine {
     config: AutonomyConfig = {}
   ): Promise<LoopRunResult> {
     const maxCycles = Math.max(1, config.maxCycles ?? DEFAULT_MAX_CYCLES);
-    // AutonomyConfig.maxReplans puede ajustar el presupuesto por run.
+    // AutonomyConfig.maxReplans can adjust the budget per run.
     if (config.maxReplans !== undefined) {
       this.maxReplans = config.maxReplans;
     }
@@ -420,9 +422,9 @@ export class AutonomyLoopEngine {
   }
 
   /**
-   * Bloqueo limpio del modelo existente: cada tarea fallida sin
-   * presupuesto pasa a "blocked" y el proyecto a "paused" (estado que ya
-   * usa ApprovalGate.reject) — jamás un loop infinito de reintentos.
+   * Clean blocking on the existing model: every failed task without
+   * budget becomes "blocked" and the project "paused" (the same state
+   * ApprovalGate.reject already uses) — never an infinite retry loop.
    */
   private blockProject(project: ProjectState, reason: string): void {
     for (const task of project.tasks) {

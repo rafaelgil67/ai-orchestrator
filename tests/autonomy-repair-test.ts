@@ -1,6 +1,6 @@
-// Repair Engine MVP — FASE repair.
-// Verifica: repair atribuible → ready → re-ejecución → re-verificación;
-// maxRepairs; detección de no-progreso; trace; gate intacto.
+// Repair Engine MVP — repair phase.
+// Verifies: attributable repair → ready → re-execution → re-verification;
+// maxRepairs; no-progress detection; trace; gate intact.
 //   npx tsx tests/autonomy-repair-test.ts
 import { ProjectStateManager } from "../src/core/project-state/manager.js";
 import { StrategicAnalysisService } from "../src/core/strategy/service.js";
@@ -32,7 +32,7 @@ function t(nombre: string, fn: () => void | Promise<void>) {
 }
 const assert = (c: unknown, m: string) => { if (!c) throw new Error(m); };
 
-/** Falla cada tarea SOLO en la primera verificación → repair + éxito. */
+/** Fails each task ONLY on the first verification → repair + success. */
 class FailOncePerTaskVerifier implements TaskVerifier {
   private failed = new Set<string>();
   verifyTask(task: ProjectTask): TaskVerification {
@@ -44,7 +44,7 @@ class FailOncePerTaskVerifier implements TaskVerifier {
   }
 }
 
-/** Falla siempre las tareas de un rol; finding estable (no-progreso). */
+/** Always fails tasks of a given role; stable finding (no progress). */
 class FailRoleVerifier implements TaskVerifier {
   constructor(private role: string, private label: (n: number) => string) {}
   private rounds = 0;
@@ -79,63 +79,63 @@ function build(verifier?: TaskVerifier, maxRepairs?: number) {
 async function approvedProject(sys: ReturnType<typeof build>) {
   const r = await sys.strategicService.analyze({
     projectName: "Repair Test",
-    prompt: "Proyecto para probar el repair engine."
+    prompt: "Project to test the repair engine."
   });
-  sys.approvalGate.approve(r.project.id, "aprobado en test");
+  sys.approvalGate.approve(r.project.id, "approved in test");
   return r.project;
 }
 
-console.log("\nRepair Engine MVP — pruebas\n");
+console.log("\nRepair Engine MVP — tests\n");
 
-// 1+2+5+6. Verification reparable → repair → ready → re-ejecución →
-// completed, con repairCount y trazabilidad correctas.
-await t("verification falla reparable → repair → completed", async () => {
+// 1+2+5+6. Repairable verification → repair → ready → re-execution →
+// completed, with correct repairCount and traceability.
+await t("repairable verification failure → repair → completed", async () => {
   const sys = build(new FailOncePerTaskVerifier());
   const project = await approvedProject(sys);
   const run = await sys.engine.run(project.id);
-  assert(run.stoppedReason === "completed", `esperaba completed, llegó ${run.stoppedReason}`);
-  assert(run.decisions.includes("repair"), `sin decisión repair: ${run.decisions}`);
+  assert(run.stoppedReason === "completed", `expected completed, got ${run.stoppedReason}`);
+  assert(run.decisions.includes("repair"), `no repair decision: ${run.decisions}`);
   const p = sys.stateManager.getProject(project.id);
   assert(p.metadata.repairCount === 1, `repairCount=${p.metadata.repairCount} ≠ 1`);
-  assert(p.phase === "completed" && p.status === "completed", "proyecto no completó tras reparación");
-  // Las 8 tareas reparadas se re-ejecutaron (2 entradas de historial).
+  assert(p.phase === "completed" && p.status === "completed", "project did not complete after repair");
+  // The 8 repaired tasks were re-executed (2 history entries).
   assert(p.tasks.every(task => task.attemptHistory.length === 2),
-    "las tareas reparadas no tienen 2 intentos en attemptHistory");
-  // El agente recibió el repairContext en la segunda ejecución.
-  const secondExec = sys.agent.receivedTasks[8]; // primer reintento de reparación
-  assert(secondExec?.inputs?.repairContext, "el agente no recibió repairContext");
+    "repaired tasks do not have 2 attempts in attemptHistory");
+  // The agent received the repairContext on the second execution.
+  const secondExec = sys.agent.receivedTasks[8]; // first repair retry
+  assert(secondExec?.inputs?.repairContext, "the agent did not receive repairContext");
   const repairTrace = (p.autonomyTrace ?? []).find(e => e.action === "repair");
   assert(repairTrace?.taskId && repairTrace.reason && repairTrace.cycle > 0 &&
     repairTrace.outcome === "repair_scheduled",
-    `trace repair incorrecto: ${JSON.stringify(repairTrace)}`);
+    `incorrect repair trace: ${JSON.stringify(repairTrace)}`);
 });
 
-// 1 (foco) — durante el repair la tarea afectada vuelve a "ready".
-await t("repair → la tarea afectada queda en ready", async () => {
+// 1 (focus) — during repair the affected task goes back to "ready".
+await t("repair → the affected task returns to ready", async () => {
   const verifier = new FailRoleVerifier("testing", () => "single-task finding");
   const sys = build(verifier);
   const project = await approvedProject(sys);
-  // Paso a paso hasta la decisión repair; inspección intermedia.
+  // Step by step until the repair decision; intermediate inspection.
   let step;
   do {
     verifier.beginRound();
     step = await sys.engine.step(project.id);
   } while (!step.terminal && step.decision !== "repair");
-  assert(step.decision === "repair", `esperaba repair, llegó ${step.decision}`);
+  assert(step.decision === "repair", `expected repair, got ${step.decision}`);
   const p = sys.stateManager.getProject(project.id);
   const fixed = p.tasks.find(task => task.role === "testing");
-  assert(fixed?.status === "ready", `tarea reparada no quedó ready: ${fixed?.status}`);
-  assert(fixed?.repairContext?.repairCycle === 1, "repairContext ausente o ciclo incorrecto");
-  assert(fixed!.attemptHistory.length === 1, "attemptHistory se reseteó indebidamente");
-  assert(p.phase === "execution", "la fase no regresó a execution");
+  assert(fixed?.status === "ready", `repaired task did not end up ready: ${fixed?.status}`);
+  assert(fixed?.repairContext?.repairCycle === 1, "missing repairContext or wrong cycle");
+  assert(fixed!.attemptHistory.length === 1, "attemptHistory was improperly reset");
+  assert(p.phase === "execution", "the phase did not return to execution");
   assert(p.tasks.filter(task => task.status === "ready").length === 1,
-    "se reabrieron tareas no afectadas");
+    "unaffected tasks were reopened");
 });
 
-// 3. Repair sin progreso persistente con findings VARIABLES → maxRepairs.
-await t("repairs agotados → maxRepairs → paused", async () => {
-  // Findings distintos en cada ronda → nunca hay noProgress; agota el
-  // presupuesto de reparación (maxRepairs=2).
+// 3. Repair without persistent progress with VARIABLE findings → maxRepairs.
+await t("repairs exhausted → maxRepairs → paused", async () => {
+  // Different findings each round → never noProgress; exhausts the
+  // repair budget (maxRepairs=2).
   const verifier = new FailRoleVerifier("testing", n => `round-${n} failure`);
   const sys = build(verifier, 2);
   const project = await approvedProject(sys);
@@ -144,46 +144,46 @@ await t("repairs agotados → maxRepairs → paused", async () => {
     verifier.beginRound();
     step = await sys.engine.step(project.id);
   } while (!step.terminal);
-  assert(step.decision === "block", `esperaba block, llegó ${step.decision}`);
+  assert(step.decision === "block", `expected block, got ${step.decision}`);
   const p = sys.stateManager.getProject(project.id);
-  assert(p.status === "paused", `proyecto no pausado: ${p.status}`);
+  assert(p.status === "paused", `project not paused: ${p.status}`);
   assert(p.metadata.repairCount === 2, `repairCount=${p.metadata.repairCount} ≠ 2`);
   const repairs = (p.autonomyTrace ?? []).filter(e => e.action === "repair");
-  assert(repairs.length === 2, `esperaba 2 repairs, hubo ${repairs.length}`);
+  assert(repairs.length === 2, `expected 2 repairs, got ${repairs.length}`);
 });
 
-// 4. Findings idénticos consecutivos → noProgress → block + paused.
-await t("findings idénticos → noProgress → block inmediato", async () => {
+// 4. Consecutive identical findings → noProgress → block + paused.
+await t("identical findings → noProgress → immediate block", async () => {
   const verifier = new FailRoleVerifier("testing", () => "always the same");
   const sys = build(verifier);
   const project = await approvedProject(sys);
   const run = await sys.engine.run(project.id);
   assert(run.stoppedReason === "paused" || run.stoppedReason === "blocked",
-    `esperaba paused/blocked, llegó ${run.stoppedReason}`);
+    `expected paused/blocked, got ${run.stoppedReason}`);
   const last = (sys.stateManager.getProject(project.id).autonomyTrace ?? []).at(-1);
   assert(last?.action === "block" && /no progress/i.test(last.reason),
-    `razón inesperada: ${last?.reason}`);
-  // Solo 1 reparación: la segunda verificación idéntica bloquea.
+    `unexpected reason: ${last?.reason}`);
+  // Only 1 repair: the second identical verification blocks.
   assert(sys.stateManager.getProject(project.id).metadata.repairCount === 1,
-    "repairCount debió quedar en 1");
+    "repairCount should have stayed at 1");
 });
 
-// 7. Sin aprobación el gate sigue protegiendo aunque haya repair pendiente.
-await t("sin decisión approved → bloqueo aunque exista repair disponible", async () => {
+// 7. Without approval the gate still protects even with a pending repair.
+await t("no approved decision → block even when a repair is available", async () => {
   const sys = build(new FailOncePerTaskVerifier());
   const r = await sys.strategicService.analyze({
     projectName: "Gate Test",
-    prompt: "Proyecto sin aprobación con fallo reparable."
+    prompt: "Project without approval with a repairable failure."
   });
-  // Forzar verification+running sin approve() → C3 bloquea antes de todo.
+  // Force verification+running without approve() → C3 blocks first.
   sys.stateManager.updatePhase(r.project.id, "verification");
   sys.stateManager.updateStatus(r.project.id, "running");
   const run = await sys.engine.run(r.project.id);
-  assert(run.cycles === 1, `debía bloquear en 1 ciclo, llegó ${run.cycles}`);
+  assert(run.cycles === 1, `should have blocked in 1 cycle, got ${run.cycles}`);
   const p = sys.stateManager.getProject(r.project.id);
   assert(p.status === "paused" && !run.decisions.includes("repair"),
-    `se ejecutó repair sin aprobación: ${run.decisions}`);
-  assert(sys.agent.receivedTasks.length === 0, "se ejecutaron tareas sin aprobación");
+    `repair ran without approval: ${run.decisions}`);
+  assert(sys.agent.receivedTasks.length === 0, "tasks were executed without approval");
 });
 
 console.log(`\n${ok} PASSED · ${fail} FAILED\n`);

@@ -1,6 +1,6 @@
-// Replan Engine MVP — plan_invalid → tareas correctivas aditivas.
-// Reglas verificadas: completed jamás se toca, deps solo a existentes,
-// maxReplans, noProgress, gate intacto, trace completo.
+// Replan Engine MVP — plan_invalid → additive corrective tasks.
+// Verified rules: completed tasks are never touched, deps only point to
+// existing tasks, maxReplans, noProgress, gate intact, full trace.
 //   npx tsx tests/autonomy-replan-test.ts
 import { ProjectStateManager } from "../src/core/project-state/manager.js";
 import { StrategicAnalysisService } from "../src/core/strategy/service.js";
@@ -32,7 +32,7 @@ function t(nombre: string, fn: () => void | Promise<void>) {
 }
 const assert = (c: unknown, m: string) => { if (!c) throw new Error(m); };
 
-/** plan_invalid UNA vez sobre un rol → replan → éxito. */
+/** plan_invalid ONCE on a role → replan → success. */
 class PlanInvalidOnceVerifier implements TaskVerifier {
   private fired = false;
   constructor(private role: string) {}
@@ -49,15 +49,14 @@ class PlanInvalidOnceVerifier implements TaskVerifier {
   }
 }
 
-/** plan_invalid SIEMPRE sobre la MISMA tarea original (finding fijo). */
+/** plan_invalid ALWAYS on the SAME original task (fixed finding). */
 class PlanInvalidPersistentVerifier implements TaskVerifier {
   private target: string | null = null;
   constructor(private label: (n: number) => string, private role: string) {}
   private n = 0;
   verifyTask(task: ProjectTask): TaskVerification {
-    // Solo ataca la primera tarea capturada del rol — las tareas
-    // correctivas nuevas pasan limpias → signature estable si el
-    // finding es constante.
+    // Only attacks the first captured task of the role — new corrective
+    // tasks pass cleanly → stable signature if the finding is constant.
     if (task.role === this.role && !task.title.startsWith("[REPLAN]")) {
       this.target = this.target ?? task.id;
       if (task.id === this.target) {
@@ -72,7 +71,7 @@ class PlanInvalidPersistentVerifier implements TaskVerifier {
   }
 }
 
-/** plan_invalid apuntando a una tarea inexistente → replan inválido. */
+/** plan_invalid pointing at a nonexistent task → invalid replan. */
 class PlanInvalidGhostVerifier implements TaskVerifier {
   private fired = false;
   verifyTask(task: ProjectTask): TaskVerification {
@@ -88,7 +87,7 @@ class PlanInvalidGhostVerifier implements TaskVerifier {
   }
 }
 
-/** Falla una vez por tarea sin kind → task_execution → repair. */
+/** Fails once per task without kind → task_execution → repair. */
 class FailOnceVerifier implements TaskVerifier {
   private failed = new Set<string>();
   verifyTask(task: ProjectTask): TaskVerification {
@@ -122,68 +121,68 @@ function build(verifier?: TaskVerifier, maxReplans?: number) {
 async function approvedProject(sys: ReturnType<typeof build>) {
   const r = await sys.strategicService.analyze({
     projectName: "Replan Test",
-    prompt: "Proyecto para probar el replan engine."
+    prompt: "Project to test the replan engine."
   });
-  sys.approvalGate.approve(r.project.id, "aprobado en test");
+  sys.approvalGate.approve(r.project.id, "approved in test");
   return r.project;
 }
 
-console.log("\nReplan Engine MVP — pruebas\n");
+console.log("\nReplan Engine MVP — tests\n");
 
-// 1+2+3+4+5+6+12+13. plan_invalid → replan → nuevas tareas → completed.
-await t("plan_invalid → replan → tareas correctivas → completed", async () => {
+// 1+2+3+4+5+6+12+13. plan_invalid → replan → new tasks → completed.
+await t("plan_invalid → replan → corrective tasks → completed", async () => {
   const sys = build(new PlanInvalidOnceVerifier("testing"));
   const project = await approvedProject(sys);
   const run = await sys.engine.run(project.id);
-  assert(run.stoppedReason === "completed", `esperaba completed, llegó ${run.stoppedReason}`);
-  assert(run.decisions.includes("replan"), `sin decisión replan: ${run.decisions}`);
+  assert(run.stoppedReason === "completed", `expected completed, got ${run.stoppedReason}`);
+  assert(run.decisions.includes("replan"), `no replan decision: ${run.decisions}`);
 
   const p = sys.stateManager.getProject(project.id);
   assert(p.metadata.replanCount === 1, `replanCount=${p.metadata.replanCount} ≠ 1`);
 
-  // Correctivas identificables por prefijo; las demás son originales.
+  // Corrective tasks are identifiable by prefix; the rest are original.
   const added = p.tasks.filter(x => x.title.startsWith("[REPLAN]"));
   const originalTasks = p.tasks.filter(x => !x.title.startsWith("[REPLAN]"));
   const originalIds = new Set(originalTasks.map(x => x.id));
-  assert(added.length === 1, `esperaba 1 tarea correctiva, hay ${added.length}`);
-  assert(originalTasks.length === 8, `esperaba 8 originales, hay ${originalTasks.length}`);
+  assert(added.length === 1, `expected 1 corrective task, got ${added.length}`);
+  assert(originalTasks.length === 8, `expected 8 original tasks, got ${originalTasks.length}`);
   assert(originalTasks
-    .every(x => x.status === "completed"), "una original dejó de estar completed");
+    .every(x => x.status === "completed"), "an original task left the completed state");
 
-  // Originales NO se re-ejecutaron (1 intento), correctiva ejecutada.
+  // Original tasks were NOT re-executed (1 attempt); corrective executed.
   assert(originalTasks
-    .every(x => x.attemptHistory.length === 1), "una original se re-ejecutó");
-  assert(added[0].attemptHistory.length === 1, "la correctiva no se ejecutó");
-  assert(added[0].status === "completed", "la correctiva no completó");
+    .every(x => x.attemptHistory.length === 1), "an original task was re-executed");
+  assert(added[0].attemptHistory.length === 1, "the corrective task was not executed");
+  assert(added[0].status === "completed", "the corrective task did not complete");
 
-  // Dep correcto: solo apunta a tareas existentes.
+  // Correct dep: only points to existing tasks.
   assert(added[0].dependsOn.every(d => originalIds.has(d)),
-    `dependencia inválida: ${added[0].dependsOn}`);
+    `invalid dependency: ${added[0].dependsOn}`);
 
-  // Trace replan completo.
+  // Complete replan trace.
   const trace = (p.autonomyTrace ?? []).find(e => e.action === "replan");
   assert(trace?.cycle > 0 && trace.phaseFrom === "verification" &&
     trace.phaseTo === "execution" && /added tasks/.test(trace.reason),
-    `trace replan incorrecto: ${JSON.stringify(trace)}`);
+    `incorrect replan trace: ${JSON.stringify(trace)}`);
 });
 
-// 7. maxReplans=1 → segundo replan → paused.
-await t("maxReplans agotado → block + paused", async () => {
+// 7. maxReplans=1 → second replan → paused.
+await t("maxReplans exhausted → block + paused", async () => {
   const verifier = new PlanInvalidPersistentVerifier(n => `plan flaw ${n}`, "testing");
   const sys = build(verifier); // maxReplans default = 1
   const project = await approvedProject(sys);
   const run = await sys.engine.run(project.id);
   assert(run.stoppedReason === "paused" || run.stoppedReason === "blocked",
-    `esperaba paused/blocked, llegó ${run.stoppedReason}`);
+    `expected paused/blocked, got ${run.stoppedReason}`);
   const p = sys.stateManager.getProject(project.id);
-  assert(p.status === "paused", `proyecto no pausado: ${p.status}`);
+  assert(p.status === "paused", `project not paused: ${p.status}`);
   assert(p.metadata.replanCount === 1, `replanCount=${p.metadata.replanCount} ≠ 1`);
   const replans = (p.autonomyTrace ?? []).filter(e => e.action === "replan");
-  assert(replans.length === 1, `esperaba 1 replan, hubo ${replans.length}`);
+  assert(replans.length === 1, `expected 1 replan, got ${replans.length}`);
 });
 
-// 8. Findings idénticos → noProgress → block + paused (sin replan infinito).
-await t("findings idénticos post-replan → noProgress → paused", async () => {
+// 8. Identical findings → noProgress → block + paused (no infinite replan).
+await t("identical findings post-replan → noProgress → paused", async () => {
   const verifier = new PlanInvalidPersistentVerifier(() => "same flaw", "testing");
   const sys = build(verifier);
   const project = await approvedProject(sys);
@@ -191,58 +190,58 @@ await t("findings idénticos post-replan → noProgress → paused", async () =>
   const p = sys.stateManager.getProject(project.id);
   const last = (p.autonomyTrace ?? []).at(-1);
   assert(last?.action === "block" && /no progress/i.test(last.reason),
-    `razón inesperada: ${last?.reason}`);
-  assert(p.status === "paused", `proyecto no pausado: ${p.status}`);
-  assert(p.metadata.replanCount === 1, "replanCount debió quedar en 1");
+    `unexpected reason: ${last?.reason}`);
+  assert(p.status === "paused", `project not paused: ${p.status}`);
+  assert(p.metadata.replanCount === 1, "replanCount should have stayed at 1");
 });
 
-// 9. Finding sobre taskId inexistente → replan inválido → block, sin inserts.
-await t("dependencia inexistente → replan rechazado → block sin insertar", async () => {
+// 9. Finding on a nonexistent taskId → invalid replan → block, no inserts.
+await t("nonexistent dependency → replan rejected → block without inserting", async () => {
   const sys = build(new PlanInvalidGhostVerifier());
   const project = await approvedProject(sys);
   await sys.engine.run(project.id);
   const p = sys.stateManager.getProject(project.id);
-  assert(p.status === "paused", `proyecto no pausado: ${p.status}`);
+  assert(p.status === "paused", `project not paused: ${p.status}`);
   const corrective = p.tasks.filter(x => x.title.startsWith("[REPLAN]"));
   assert(corrective.length === 0,
-    `se insertaron ${corrective.length} tareas tras replan inválido`);
+    `${corrective.length} tasks were inserted after an invalid replan`);
   const last = (p.autonomyTrace ?? []).at(-1);
   assert(last?.action === "block" && /Replan refused/.test(last.reason),
-    `razón inesperada: ${last?.reason}`);
+    `unexpected reason: ${last?.reason}`);
 });
 
-// 10. Replan sin approved → gate bloquea antes de todo.
-await t("verification forzado sin approved → block, replan jamás corre", async () => {
+// 10. Replan without approved → the gate blocks before anything else.
+await t("forced verification without approved → block, replan never runs", async () => {
   const sys = build(new PlanInvalidOnceVerifier("testing"));
   const r = await sys.strategicService.analyze({
     projectName: "Gate Replan",
-    prompt: "Proyecto sin aprobación con fallo plan_invalid."
+    prompt: "Project without approval with a plan_invalid failure."
   });
   sys.stateManager.updatePhase(r.project.id, "verification");
   sys.stateManager.updateStatus(r.project.id, "running");
   const run = await sys.engine.run(r.project.id);
-  assert(run.cycles === 1, `debía bloquear en 1 ciclo, llegó ${run.cycles}`);
-  assert(!run.decisions.includes("replan"), `replan ejecutado sin aprobación`);
+  assert(run.cycles === 1, `should have blocked in 1 cycle, got ${run.cycles}`);
+  assert(!run.decisions.includes("replan"), `replan ran without approval`);
   const p = sys.stateManager.getProject(r.project.id);
-  assert(p.status === "paused", `proyecto no pausado: ${p.status}`);
+  assert(p.status === "paused", `project not paused: ${p.status}`);
 });
 
-// 11. Repair sigue funcionando sin regresión.
-await t("repair (sin kind) sigue funcionando — sin regresión", async () => {
+// 11. Repair still works — no regression.
+await t("repair (without kind) still works — no regression", async () => {
   const sys = build(new FailOnceVerifier());
   const project = await approvedProject(sys);
   const run = await sys.engine.run(project.id);
-  assert(run.stoppedReason === "completed", `repair regresión: ${run.stoppedReason}`);
+  assert(run.stoppedReason === "completed", `repair regression: ${run.stoppedReason}`);
   assert(run.decisions.includes("repair") && !run.decisions.includes("replan"),
-    `decisiones inesperadas: ${run.decisions}`);
+    `unexpected decisions: ${run.decisions}`);
 });
 
-// 14. maxCycles sigue acotando el loop.
-await t("run con maxCycles=1 → max_cycles aun con replan disponible", async () => {
+// 14. maxCycles still bounds the loop.
+await t("run with maxCycles=1 → max_cycles even with replan available", async () => {
   const sys = build(new PlanInvalidOnceVerifier("testing"));
   const project = await approvedProject(sys);
   const run = await sys.engine.run(project.id, { maxCycles: 1 });
-  assert(run.stoppedReason === "max_cycles", `esperaba max_cycles, llegó ${run.stoppedReason}`);
+  assert(run.stoppedReason === "max_cycles", `expected max_cycles, got ${run.stoppedReason}`);
   assert(run.cycles === 1, `cycles=${run.cycles} ≠ 1`);
 });
 

@@ -14,16 +14,16 @@ export class Planner {
       {
         id: "PLAN-001",
         projectId: request.projectId,
-        title: "Analizar requisitos funcionales",
+        title: "Analyze functional requirements",
         description:
-          "Convertir los requisitos proporcionados en especificaciones funcionales verificables.",
+          "Turn the provided requirements into verifiable functional specifications.",
         capability: "requirements",
         status: "pending",
         dependsOn: [],
         acceptanceCriteria: [
-          "Todos los requisitos obligatorios están identificados.",
-          "Cada requisito tiene criterios de aceptación.",
-          "No existen ambigüedades críticas sin resolver."
+          "All mandatory requirements are identified.",
+          "Every requirement has acceptance criteria.",
+          "No critical ambiguities remain unresolved."
         ],
         inputs: {
           requirements: request.requirements
@@ -34,16 +34,16 @@ export class Planner {
       {
         id: "PLAN-002",
         projectId: request.projectId,
-        title: "Definir arquitectura técnica",
+        title: "Define technical architecture",
         description:
-          "Diseñar la arquitectura técnica de la solución a partir de los requisitos validados.",
+          "Design the solution's technical architecture from the validated requirements.",
         capability: "architecture",
         status: "pending",
         dependsOn: ["PLAN-001"],
         acceptanceCriteria: [
-          "La arquitectura cubre frontend, backend, datos e infraestructura.",
-          "Las integraciones necesarias están identificadas.",
-          "Los principales riesgos técnicos están contemplados."
+          "The architecture covers frontend, backend, data and infrastructure.",
+          "Required integrations are identified.",
+          "Major technical risks are addressed."
         ],
         inputs: {
           objective: request.objective,
@@ -55,16 +55,16 @@ export class Planner {
       {
         id: "PLAN-003",
         projectId: request.projectId,
-        title: "Diseñar modelo de datos",
+        title: "Design data model",
         description:
-          "Diseñar las estructuras de persistencia necesarias para implementar la solución.",
+          "Design the persistence structures needed to implement the solution.",
         capability: "database",
         status: "pending",
         dependsOn: ["PLAN-002"],
         acceptanceCriteria: [
-          "Las entidades principales están identificadas.",
-          "Las relaciones son coherentes.",
-          "La estructura soporta los requisitos funcionales."
+          "The main entities are identified.",
+          "Relationships are consistent.",
+          "The structure supports the functional requirements."
         ],
         inputs: {
           objective: request.objective
@@ -75,16 +75,16 @@ export class Planner {
       {
         id: "PLAN-004",
         projectId: request.projectId,
-        title: "Diseñar experiencia e interfaz",
+        title: "Design experience and interface",
         description:
-          "Definir la experiencia de usuario y la interfaz necesarias para la solución.",
+          "Define the user experience and interface required for the solution.",
         capability: "uiux",
         status: "pending",
         dependsOn: ["PLAN-002"],
         acceptanceCriteria: [
-          "Los flujos principales están definidos.",
-          "La interfaz cubre las funciones principales.",
-          "La experiencia es coherente y usable."
+          "The main flows are defined.",
+          "The interface covers the core features.",
+          "The experience is consistent and usable."
         ],
         inputs: {
           objective: request.objective
@@ -95,9 +95,9 @@ export class Planner {
       {
         id: "PLAN-005",
         projectId: request.projectId,
-        title: "Implementar solución",
+        title: "Implement solution",
         description:
-          "Construir la aplicación siguiendo la arquitectura, modelo de datos y diseño aprobados.",
+          "Build the application following the approved architecture, data model and design.",
         capability: "coding",
         status: "pending",
         dependsOn: [
@@ -105,9 +105,9 @@ export class Planner {
           "PLAN-004"
         ],
         acceptanceCriteria: [
-          "La aplicación compila correctamente.",
-          "Las funcionalidades requeridas están implementadas.",
-          "La implementación respeta la arquitectura definida."
+          "The application compiles correctly.",
+          "Required features are implemented.",
+          "The implementation follows the defined architecture."
         ],
         inputs: {
           objective: request.objective
@@ -118,16 +118,16 @@ export class Planner {
       {
         id: "PLAN-006",
         projectId: request.projectId,
-        title: "Ejecutar pruebas y QA",
+        title: "Run tests and QA",
         description:
-          "Verificar funcionalidad, regresiones y cumplimiento de criterios de aceptación.",
+          "Verify functionality, regressions and acceptance criteria compliance.",
         capability: "testing",
         status: "pending",
         dependsOn: ["PLAN-005"],
         acceptanceCriteria: [
-          "Las pruebas críticas pasan.",
-          "No existen regresiones críticas conocidas.",
-          "Los criterios de aceptación se cumplen."
+          "Critical tests pass.",
+          "No known critical regressions exist.",
+          "Acceptance criteria are met."
         ],
         inputs: {
           definitionOfDone: request.definitionOfDone
@@ -138,16 +138,16 @@ export class Planner {
       {
         id: "PLAN-007",
         projectId: request.projectId,
-        title: "Auditar seguridad",
+        title: "Audit security",
         description:
-          "Analizar la solución en busca de vulnerabilidades y problemas de configuración.",
+          "Analyze the solution for vulnerabilities and configuration issues.",
         capability: "security",
         status: "pending",
         dependsOn: ["PLAN-005"],
         acceptanceCriteria: [
-          "No existen vulnerabilidades críticas conocidas.",
-          "Las credenciales y secretos están protegidos.",
-          "Los controles de acceso son adecuados."
+          "No known critical vulnerabilities exist.",
+          "Credentials and secrets are protected.",
+          "Access controls are adequate."
         ],
         inputs: {},
         priority: "critical"
@@ -156,9 +156,9 @@ export class Planner {
       {
         id: "PLAN-008",
         projectId: request.projectId,
-        title: "Preparar despliegue",
+        title: "Prepare deployment",
         description:
-          "Preparar la solución para su ejecución o despliegue en el entorno objetivo.",
+          "Prepare the solution for execution or deployment in the target environment.",
         capability: "devops",
         status: "pending",
         dependsOn: [
@@ -166,9 +166,9 @@ export class Planner {
           "PLAN-007"
         ],
         acceptanceCriteria: [
-          "El proceso de despliegue está definido.",
-          "La aplicación puede ejecutarse en el entorno objetivo.",
-          "Las verificaciones finales están documentadas."
+          "The deployment process is defined.",
+          "The application can run in the target environment.",
+          "Final verifications are documented."
         ],
         inputs: {},
         priority: "high"
@@ -184,8 +184,8 @@ export class Planner {
       tasks: graph.listTasks(),
       executionOrder,
       summary:
-        `Plan generado con ${tasks.length} tareas y ` +
-        `${executionOrder.length} posiciones de ejecución.`
+        `Plan generated with ${tasks.length} tasks and ` +
+        `${executionOrder.length} execution slots.`
     };
   }
 

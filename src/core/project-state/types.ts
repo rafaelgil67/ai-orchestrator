@@ -98,9 +98,9 @@ export interface ProjectTask {
   lastFailureReason?: string;
   lastAttemptAt?: string;
 
-  /** Contexto de reparación inyectado por el Repair Engine tras una
-   *  verification failure atribuible a esta tarea. Aditivo y opcional;
-   *  el executor lo transporta dentro de AgentTask.inputs. */
+  /** Repair context injected by the Repair Engine after a verification
+   *  failure attributable to this task. Additive and optional; the
+   *  executor transports it inside AgentTask.inputs. */
   repairContext?: RepairContext;
 
   attemptHistory: TaskAttempt[];
@@ -125,9 +125,9 @@ export interface ProjectState {
 
   activeAgent?: string;
 
-  /** Trazabilidad del Autonomy Loop Engine (FASE loop). Aditiva y
-   *  opcional: proyectos creados antes de la fase no la tienen.
-   *  Complementa (no reemplaza) attemptHistory de cada tarea. */
+  /** Autonomy Loop Engine traceability. Additive and optional:
+   *  projects created before this phase do not have it.
+   *  Complements (does not replace) each task's attemptHistory. */
   autonomyTrace?: AutonomyTrace[];
 
   quality: {

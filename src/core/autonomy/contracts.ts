@@ -4,10 +4,10 @@ import type {
   ProjectState
 } from "../project-state/types.js";
 
-// LoopDecision y AutonomyTrace viven en project-state/types.ts porque
-// forman parte de la forma de ProjectState (campo autonomyTrace). Se
-// re-exportan aquí para que los consumidores del módulo autonomy sigan
-// usando un único punto de contratos — sin ciclo de imports.
+// LoopDecision and AutonomyTrace live in project-state/types.ts because
+// they are part of the ProjectState shape (autonomyTrace field). They are
+// re-exported here so consumers of the autonomy module keep a single
+// contracts entry point — without an import cycle.
 export type { AutonomyTrace, LoopDecision };
 
 export interface LoopStepResult {
@@ -27,9 +27,9 @@ export type LoopStoppedReason =
   | "max_cycles";
 
 export interface AutonomyConfig {
-  /** Protección absoluta contra loops infinitos (defecto: 50). */
+  /** Absolute protection against infinite loops (default: 50). */
   maxCycles?: number;
-  /** Presupuesto de replanificaciones por proyecto (defecto: 1). */
+  /** Replan budget per project (default: 1). */
   maxReplans?: number;
 }
 

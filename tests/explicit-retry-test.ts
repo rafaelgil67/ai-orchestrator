@@ -68,14 +68,14 @@ const scheduler =
     executionEngine
   );
 
-console.log("\n=== 1. CREAR PROYECTO ===");
+console.log("\n=== 1. CREATE PROJECT ===");
 
 const analysis =
   await strategicService.analyze({
     projectName:
-      "Prueba de retry explícito",
+      "Explicit retry test",
     prompt:
-      "Crear una plataforma para administrar clientes, pólizas, renovaciones, siniestros y documentos."
+      "Build a platform to manage clients, policies, renewals, claims and documents."
   });
 
 console.log({
@@ -87,14 +87,14 @@ console.log({
     analysis.project.status
 });
 
-console.log("\n=== 2. APROBAR ===");
+console.log("\n=== 2. APPROVE ===");
 
 approvalGate.approve(
   analysis.project.id,
-  "Aprobado para prueba controlada de retry explícito."
+  "Approved for controlled explicit-retry testing."
 );
 
-console.log("\n=== 3. PLANIFICAR ===");
+console.log("\n=== 3. PLAN ===");
 
 planningService.plan(
   analysis.project.id
@@ -114,7 +114,7 @@ console.log({
     plannedProject.status
 });
 
-console.log("\n=== 4. PRIMERA EJECUCIÓN ===");
+console.log("\n=== 4. FIRST EXECUTION ===");
 
 const firstResults =
   await scheduler.runNext(
@@ -152,7 +152,7 @@ const failedTask =
 
 if (!failedTask) {
   throw new Error(
-    "FALLO: no se encontró una tarea fallida después de la primera ejecución."
+    "FAILURE: no failed task was found after the first execution."
   );
 }
 
@@ -171,13 +171,13 @@ console.log({
 
 if (failedTask.attempts !== 1) {
   throw new Error(
-    `FALLO: se esperaba attempts=1. Actual: ${failedTask.attempts}`
+    `FAILURE: expected attempts=1. Actual: ${failedTask.attempts}`
   );
 }
 
 if (failedTask.retryCount !== 0) {
   throw new Error(
-    `FALLO: se esperaba retryCount=0 antes del retry. Actual: ${failedTask.retryCount}`
+    `FAILURE: expected retryCount=0 before the retry. Actual: ${failedTask.retryCount}`
   );
 }
 
@@ -185,11 +185,11 @@ if (
   failedTask.attemptHistory.length !== 1
 ) {
   throw new Error(
-    "FALLO: se esperaba exactamente un registro en attemptHistory."
+    "FAILURE: expected exactly one entry in attemptHistory."
   );
 }
 
-console.log("\n=== 5. RETRY EXPLÍCITO ===");
+console.log("\n=== 5. EXPLICIT RETRY ===");
 
 const retryResult =
   await scheduler.retryTask(
@@ -212,23 +212,23 @@ console.log({
 
 if (!retryResult.success) {
   throw new Error(
-    "FALLO: el retry explícito no terminó correctamente."
+    "FAILURE: the explicit retry did not complete successfully."
   );
 }
 
 if (retryResult.attempt !== 2) {
   throw new Error(
-    `FALLO: se esperaba attempt=2. Actual: ${retryResult.attempt}`
+    `FAILURE: expected attempt=2. Actual: ${retryResult.attempt}`
   );
 }
 
 if (retryResult.retry !== true) {
   throw new Error(
-    "FALLO: el resultado del retry no está marcado como retry=true."
+    "FAILURE: the retry result is not marked as retry=true."
   );
 }
 
-console.log("\n=== 6. VALIDAR ESTADO FINAL ===");
+console.log("\n=== 6. VALIDATE FINAL STATE ===");
 
 const finalProject =
   stateManager.getProject(
@@ -243,7 +243,7 @@ const finalTask =
 
 if (!finalTask) {
   throw new Error(
-    "FALLO: la tarea desapareció después del retry."
+    "FAILURE: the task disappeared after the retry."
   );
 }
 
@@ -264,19 +264,19 @@ console.log({
 
 if (finalTask.status !== "completed") {
   throw new Error(
-    `FALLO: se esperaba status=completed. Actual: ${finalTask.status}`
+    `FAILURE: expected status=completed. Actual: ${finalTask.status}`
   );
 }
 
 if (finalTask.attempts !== 2) {
   throw new Error(
-    `FALLO: se esperaban 2 attempts. Actual: ${finalTask.attempts}`
+    `FAILURE: expected 2 attempts. Actual: ${finalTask.attempts}`
   );
 }
 
 if (finalTask.retryCount !== 1) {
   throw new Error(
-    `FALLO: se esperaba retryCount=1. Actual: ${finalTask.retryCount}`
+    `FAILURE: expected retryCount=1. Actual: ${finalTask.retryCount}`
   );
 }
 
@@ -284,7 +284,7 @@ if (
   finalTask.attemptHistory.length !== 2
 ) {
   throw new Error(
-    `FALLO: se esperaban 2 registros de intento. Actual: ${finalTask.attemptHistory.length}`
+    `FAILURE: expected 2 attempt records. Actual: ${finalTask.attemptHistory.length}`
   );
 }
 
@@ -292,7 +292,7 @@ if (
   finalTask.attemptHistory[0].success !== false
 ) {
   throw new Error(
-    "FALLO: el primer intento no quedó registrado como fallido."
+    "FAILURE: the first attempt was not recorded as failed."
   );
 }
 
@@ -300,7 +300,7 @@ if (
   finalTask.attemptHistory[0].retry !== false
 ) {
   throw new Error(
-    "FALLO: el primer intento no quedó marcado como retry=false."
+    "FAILURE: the first attempt was not marked as retry=false."
   );
 }
 
@@ -308,7 +308,7 @@ if (
   finalTask.attemptHistory[1].success !== true
 ) {
   throw new Error(
-    "FALLO: el segundo intento no quedó registrado como exitoso."
+    "FAILURE: the second attempt was not recorded as successful."
   );
 }
 
@@ -316,7 +316,7 @@ if (
   finalTask.attemptHistory[1].retry !== true
 ) {
   throw new Error(
-    "FALLO: el segundo intento no quedó marcado como retry=true."
+    "FAILURE: the second attempt was not marked as retry=true."
   );
 }
 
@@ -324,7 +324,7 @@ if (
   failureAgent.receivedTasks.length !== 2
 ) {
   throw new Error(
-    `FALLO: se esperaban exactamente 2 ejecuciones del agente. Actual: ${failureAgent.receivedTasks.length}`
+    `FAILURE: expected exactly 2 agent executions. Actual: ${failureAgent.receivedTasks.length}`
   );
 }
 

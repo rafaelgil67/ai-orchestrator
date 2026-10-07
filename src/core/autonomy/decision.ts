@@ -5,19 +5,19 @@ import type { VerificationReport } from "../verification/contracts.js";
 export interface DecisionOutcome {
   decision: LoopDecision;
   reason: string;
-  /** Tarea candidata a retry cuando la decisión es "retry". */
+  /** Task candidate for retry when the decision is "retry". */
   retryTaskId?: string;
 }
 
 /**
- * Modelo de decisión post-ejecución. Reglas:
- *   · tarea fallida con retryCount < maxRetries      → retry;
- *   · tarea fallida con presupuesto agotado          → block;
- *   · todas las tareas completadas                   → continue
- *     (transición a verification);
- *   · pendientes sin ejecutables y sin fallidas      → block
- *     (deadlock de dependencias);
- *   · resto                                          → continue.
+ * Post-execution decision model. Rules:
+ *   · failed task with retryCount < maxRetries       → retry;
+ *   · failed task with budget exhausted              → block;
+ *   · all tasks completed                            → continue
+ *     (transition to verification);
+ *   · pending tasks, none executable, none failed    → block
+ *     (dependency deadlock);
+ *   · otherwise                                      → continue.
  */
 export function decideAfterExecution(
   project: ProjectState
@@ -71,9 +71,10 @@ export function decideAfterExecution(
     )
   );
 
-  // Sin ejecutables no hay "continue" válido: plan vacío, deadlock de
-  // dependencias o tareas atascadas en "running" son todos deadlock —
-  // bloqueo inmediato en lugar de consumir ciclos en "no_work".
+  // With no executable work there is no valid "continue": an empty
+  // plan, a dependency deadlock or tasks stuck in "running" are all
+  // deadlocks — block immediately instead of burning cycles on
+  // "no_work".
   if (!executable) {
     if (project.tasks.length === 0) {
       return {
@@ -112,9 +113,9 @@ export function decideAfterExecution(
 }
 
 /**
- * Modelo de decisión post-verificación: el proyecto solo puede
- * completarse si el reporte de verificación pasa. En caso contrario el
- * proyecto queda en failed y requiere autorización humana para reanudarse.
+ * Post-verification decision model: the project can only complete if
+ * the verification report passes. Otherwise the project ends in failed
+ * and requires human authorization to resume.
  */
 export function decideAfterVerification(
   report: VerificationReport

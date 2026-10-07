@@ -6,9 +6,9 @@ import {
 import { REPLAN_DEFAULTS } from "../replanning/contracts.js";
 
 /**
- * Signature estable de los findings: taskId:finding ordenados. Si dos
- * verificaciones consecutivas producen la misma signature, la reparación
- * no produjo progreso → block (nunca repetir lo mismo indefinidamente).
+ * Stable signature of the findings: sorted taskId:finding pairs. If two
+ * consecutive verifications produce the same signature, the repair
+ * produced no progress → block (never repeat the same thing forever).
  */
 export function findingsSignature(input: RepairAssessmentInput): string {
   return input.report.taskVerifications
@@ -19,17 +19,17 @@ export function findingsSignature(input: RepairAssessmentInput): string {
 }
 
 /**
- * Decisión conservadora:
- *   · mismo signature que el ciclo anterior  → block (sin progreso);
- *   · repairCount agotado                    → block (humano);
- *   · findings NO atribuibles a tareas       → block (ante la duda);
- *   · taskVerification que no corresponde a
- *     ninguna tarea del proyecto             → block;
- *   · cualquier ambigüedad                   → block, nunca asumir repair;
- *   · solo si TODO finding se atribuye a una
- *     tarea existente y completada           → repair.
- * "fail" queda reservado: en el MVP ninguna vía la produce (una
- * verificación sin atribución pausa el proyecto para revisión humana).
+ * Conservative decision:
+ *   · same signature as the previous cycle   → block (no progress);
+ *   · repairCount exhausted                   → block (human);
+ *   · findings NOT attributable to tasks      → block (when in doubt);
+ *   · taskVerification that does not map to
+ *     any project task                        → block;
+ *   · any ambiguity                           → block, never assume repair;
+ *   · only if EVERY finding maps to an
+ *     existing completed task                 → repair.
+ * "fail" is reserved: in the MVP no path produces it (an unattributed
+ * verification failure pauses the project for human review).
  */
 export class DefaultRepairDecisionService
   implements RepairDecisionService {
@@ -65,8 +65,8 @@ export class DefaultRepairDecisionService
       };
     }
 
-    // ---- Clasificación conservadora por kind ----
-    // "unknown" explícito o mezcla de clases → block, jamás asumir.
+    // ---- Conservative classification by kind ----
+    // Explicit "unknown" or mixed classes → block, never assume.
     const unclassified = failed.filter(f => f.kind === "unknown");
     if (unclassified.length > 0) {
       return {
@@ -94,7 +94,7 @@ export class DefaultRepairDecisionService
       };
     }
 
-    // ---- plan_invalid → REPLAN (presupuesto independiente) ----
+    // ---- plan_invalid → REPLAN (independent budget) ----
     if (planInvalid.length === failed.length) {
       const replanCount = input.replanCount ?? 0;
       const maxReplans =
@@ -118,7 +118,7 @@ export class DefaultRepairDecisionService
       };
     }
 
-    // ---- task_execution → REPAIR (presupuesto independiente) ----
+    // ---- task_execution → REPAIR (independent budget) ----
     if (input.repairCount >= input.maxRepairs) {
       return {
         decision: "block",
@@ -133,8 +133,8 @@ export class DefaultRepairDecisionService
       const task = input.project.tasks.find(
         t => t.id === item.taskId
       );
-      // Solo una tarea completada puede reabrirse para reparación;
-      // un finding sobre una tarea no-completada es ambiguo → block.
+      // Only a completed task can be reopened for repair; a finding
+      // on a non-completed task is ambiguous → block.
       return !task || task.status !== "completed";
     });
 

@@ -60,14 +60,14 @@ const scheduler =
     executionEngine
   );
 
-console.log("\n=== 1. DIAGNÓSTICO ===");
+console.log("\n=== 1. DIAGNOSIS ===");
 
 const analysis =
   await strategicService.analyze({
     projectName:
-      "Plataforma de gestión de seguros",
+      "Insurance management platform",
     prompt:
-      "Crear una plataforma para administrar clientes, pólizas, renovaciones, siniestros y documentos."
+      "Build a platform to manage clients, policies, renewals, claims and documents."
   });
 
 console.log({
@@ -76,12 +76,12 @@ console.log({
   status: analysis.project.status
 });
 
-console.log("\n=== 2. APROBACIÓN ===");
+console.log("\n=== 2. APPROVAL ===");
 
 const approval =
   approvalGate.approve(
     analysis.project.id,
-    "Diagnóstico aprobado para ejecución."
+    "Diagnosis approved for execution."
   );
 
 console.log({
@@ -90,7 +90,7 @@ console.log({
   status: approval.project.status
 });
 
-console.log("\n=== 3. PLANIFICACIÓN ===");
+console.log("\n=== 3. PLANNING ===");
 
 const plan =
   planningService.plan(
@@ -105,7 +105,7 @@ console.log({
     plan.planning.executionOrder
 });
 
-console.log("\n=== 4. TAREAS ===");
+console.log("\n=== 4. TASKS ===");
 
 for (const task of plan.project.tasks) {
   console.log({
@@ -117,7 +117,7 @@ for (const task of plan.project.tasks) {
   });
 }
 
-console.log("\n=== 5. EJECUCIÓN ===");
+console.log("\n=== 5. EXECUTION ===");
 
 const executionResults = [];
 
@@ -146,7 +146,7 @@ console.log({
   executionCount: executionResults.length
 });
 
-console.log("\n=== 6. RESULTADOS ===");
+console.log("\n=== 6. RESULTS ===");
 
 for (const task of finalProject.tasks) {
   console.log({

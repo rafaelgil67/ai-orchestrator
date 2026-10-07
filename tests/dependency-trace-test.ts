@@ -61,14 +61,14 @@ const scheduler =
     executionEngine
   );
 
-console.log("\n=== 1. CREAR PROYECTO ===");
+console.log("\n=== 1. CREATE PROJECT ===");
 
 const analysis =
   await strategicService.analyze({
     projectName:
-      "Prueba de trazabilidad",
+      "Traceability test",
     prompt:
-      "Crear una plataforma para administrar clientes, pólizas, renovaciones, siniestros y documentos."
+      "Build a platform to manage clients, policies, renewals, claims and documents."
   });
 
 console.log({
@@ -77,20 +77,20 @@ console.log({
   status: analysis.project.status
 });
 
-console.log("\n=== 2. APROBAR ===");
+console.log("\n=== 2. APPROVE ===");
 
 approvalGate.approve(
   analysis.project.id,
-  "Aprobado para prueba de trazabilidad."
+  "Approved for traceability testing."
 );
 
-console.log("\n=== 3. PLANIFICAR ===");
+console.log("\n=== 3. PLAN ===");
 
 planningService.plan(
   analysis.project.id
 );
 
-console.log("\n=== 4. EJECUTAR ===");
+console.log("\n=== 4. EXECUTE ===");
 
 let executionCount = 0;
 
@@ -111,7 +111,7 @@ console.log({
   executionCount
 });
 
-console.log("\n=== 5. INSPECCIONAR AGENT TASKS ===");
+console.log("\n=== 5. INSPECT AGENT TASKS ===");
 
 for (const task of traceAgent.receivedTasks) {
   const dependencyResults =
@@ -124,25 +124,25 @@ for (const task of traceAgent.receivedTasks) {
   });
 }
 
-console.log("\n=== 6. VALIDAR TRAZABILIDAD ===");
+console.log("\n=== 6. VALIDATE TRACEABILITY ===");
 
 const project =
   stateManager.getProject(
     analysis.project.id
   );
 
-console.log("\n--- 6.1 GOBERNANZA ---");
+console.log("\n--- 6.1 GOVERNANCE ---");
 
 const approvalDecision =
   project.decisions.find(
     decision =>
       decision.title ===
-      "Aprobación del proyecto"
+      "Project approval"
   );
 
 if (!approvalDecision) {
   throw new Error(
-    "FALLO DE TRAZABILIDAD: no existe la decisión de aprobación del proyecto."
+    "TRACEABILITY FAILURE: the project approval decision does not exist."
   );
 }
 
@@ -151,19 +151,19 @@ if (
   "approved"
 ) {
   throw new Error(
-    "FALLO DE TRAZABILIDAD: la decisión de aprobación no tiene estado approved."
+    "TRACEABILITY FAILURE: the approval decision is not in state approved."
   );
 }
 
 if (!approvalDecision.rationale) {
   throw new Error(
-    "FALLO DE TRAZABILIDAD: la aprobación no contiene rationale."
+    "TRACEABILITY FAILURE: the approval does not contain a rationale."
   );
 }
 
 if (!approvalDecision.createdAt) {
   throw new Error(
-    "FALLO DE TRAZABILIDAD: la aprobación no contiene createdAt."
+    "TRACEABILITY FAILURE: the approval does not contain createdAt."
   );
 }
 
@@ -178,7 +178,7 @@ console.log({
     approvalDecision.createdAt
 });
 
-console.log("\n--- 6.2 RESULTADOS DE EJECUCIÓN ---");
+console.log("\n--- 6.2 EXECUTION RESULTS ---");
 
 const completedTasks =
   project.tasks.filter(
@@ -220,7 +220,7 @@ console.log({
 
 if (!executionResultsOk) {
   throw new Error(
-    "FALLO DE TRAZABILIDAD: no todas las tareas conservaron su resultado y agente ejecutor."
+    "TRACEABILITY FAILURE: not all tasks preserved their result and executing agent."
   );
 }
 
@@ -228,28 +228,28 @@ const architectureTask =
   project.tasks.find(
     task =>
       task.title ===
-      "Definir arquitectura técnica"
+      "Define technical architecture"
   );
 
 const databaseTask =
   project.tasks.find(
     task =>
       task.title ===
-      "Diseñar modelo de datos"
+      "Design data model"
   );
 
 const uiuxTask =
   project.tasks.find(
     task =>
       task.title ===
-      "Diseñar experiencia e interfaz"
+      "Design experience and interface"
   );
 
 const codingTask =
   project.tasks.find(
     task =>
       task.title ===
-      "Implementar solución"
+      "Implement solution"
   );
 
 if (
@@ -259,7 +259,7 @@ if (
   !codingTask
 ) {
   throw new Error(
-    "No se encontraron las tareas necesarias para validar trazabilidad."
+    "Required tasks were not found to validate traceability."
   );
 }
 
@@ -277,13 +277,13 @@ const codingAgentTask =
 
 if (!architectureAgentTask) {
   throw new Error(
-    "No se encontró AgentTask para arquitectura."
+    "AgentTask for architecture was not found."
   );
 }
 
 if (!codingAgentTask) {
   throw new Error(
-    "No se encontró AgentTask para coding."
+    "AgentTask for coding was not found."
   );
 }
 
@@ -348,13 +348,13 @@ console.log({
 
 if (!architectureTraceOk) {
   throw new Error(
-    "FALLO DE TRAZABILIDAD: arquitectura no recibió correctamente el resultado de su dependencia."
+    "TRACEABILITY FAILURE: architecture did not correctly receive its dependency's result."
   );
 }
 
 if (!codingTraceOk) {
   throw new Error(
-    "FALLO DE TRAZABILIDAD: coding no recibió correctamente los resultados de sus dependencias."
+    "TRACEABILITY FAILURE: coding did not correctly receive its dependencies' results."
   );
 }
 

@@ -44,8 +44,8 @@ export class FailureRetryAgent implements Agent {
       success,
 
       summary: success
-        ? `Ejecución exitosa en intento ${this.executions} para "${task.title}".`
-        : `Fallo controlado en intento ${this.executions} para "${task.title}".`,
+        ? `Successful execution on attempt ${this.executions} for "${task.title}".`
+        : `Controlled failure on attempt ${this.executions} for "${task.title}".`,
 
       outputs: {
         taskId: task.id,

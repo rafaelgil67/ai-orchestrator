@@ -25,12 +25,12 @@ const planningService = new PlanningService(
 );
 
 const analysis = await strategicService.analyze({
-  projectName: "Plataforma de gestión de seguros",
+  projectName: "Insurance management platform",
   prompt:
-    "Crear una plataforma profesional para gestionar clientes, pólizas, renovaciones, siniestros y documentos."
+    "Build a professional platform to manage clients, policies, renewals, claims and documents."
 });
 
-console.log("\n=== 1. DIAGNÓSTICO ===");
+console.log("\n=== 1. DIAGNOSIS ===");
 console.log({
   projectId: analysis.project.id,
   phase: analysis.project.phase,
@@ -40,10 +40,10 @@ console.log({
 
 const approval = approvalGate.approve(
   analysis.project.id,
-  "El diagnóstico estratégico cumple los criterios establecidos."
+  "The strategic diagnosis meets the established criteria."
 );
 
-console.log("\n=== 2. APROBACIÓN ===");
+console.log("\n=== 2. APPROVAL ===");
 console.log({
   approved: approval.approved,
   phase: approval.project.phase,
@@ -54,7 +54,7 @@ const planning = planningService.plan(
   analysis.project.id
 );
 
-console.log("\n=== 3. PLANIFICACIÓN ===");
+console.log("\n=== 3. PLANNING ===");
 console.log({
   phase: planning.project.phase,
   status: planning.project.status,
@@ -62,7 +62,7 @@ console.log({
   executionOrder: planning.planning.executionOrder
 });
 
-console.log("\n=== 4. TAREAS ===");
+console.log("\n=== 4. TASKS ===");
 
 for (const task of planning.project.tasks) {
   console.log({

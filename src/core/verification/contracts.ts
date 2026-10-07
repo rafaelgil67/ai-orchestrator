@@ -1,11 +1,11 @@
 import { ProjectTask } from "../project-state/types.js";
 
 /**
- * Clasificación opcional del fallo (REPLAN Engine):
- *   · "task_execution" — la tarea se ejecutó mal → repair;
- *   · "plan_invalid"   — el plan vigente es insuficiente → replan;
- *   · "unknown"        — no clasificable → block (nunca asumir).
- * Ausente = comportamiento previo (verificación por tarea → repair).
+ * Optional failure classification (REPLAN Engine):
+ *   · "task_execution" — the task was executed incorrectly → repair;
+ *   · "plan_invalid"   — the current plan is insufficient → replan;
+ *   · "unknown"        — not classifiable → block (never assume).
+ * Absent = previous behavior (per-task verification → repair).
  */
 export type TaskFailureKind =
   | "task_execution"
@@ -28,9 +28,9 @@ export interface VerificationReport {
 }
 
 /**
- * Verificador de una tarea completada. Inyectable para sustituir la
- * heurística por defecto (result.success + sin issues) por un agente QA
- * real en fases posteriores.
+ * Verifier for a completed task. Injectable to replace the default
+ * heuristic (result.success + no issues) with a real QA agent in
+ * later phases.
  */
 export interface TaskVerifier {
   verifyTask(task: ProjectTask): Promise<TaskVerification> | TaskVerification;

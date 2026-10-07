@@ -34,7 +34,7 @@ export class TraceAgent implements Agent {
 
     return {
       success: true,
-      summary: `Trace agent ejecutó "${task.title}".`,
+      summary: `Trace agent executed "${task.title}".`,
       outputs: {
         traceTaskId: task.id,
         capability: task.capability,

@@ -39,31 +39,31 @@ export class MockAIProvider implements AIProvider {
     }
 
     const projectName =
-      input.projectName?.trim() || "Proyecto sin nombre";
+      input.projectName?.trim() || "Unnamed project";
 
     const prompt =
-      input.prompt?.trim() || "Sin descripción";
+      input.prompt?.trim() || "No description";
 
     const blueprint = {
       projectName,
 
       executiveSummary:
-        `Análisis inicial del proyecto "${projectName}".`,
+        `Initial analysis of project "${projectName}".`,
 
       originalPrompt: prompt,
 
       interpretedObjective:
-        `Convertir el objetivo descrito por el usuario en una solución de software profesional, segura, mantenible y verificable.`,
+        `Turn the objective described by the user into a professional, secure, maintainable and verifiable software solution.`,
 
       requirements: [
         {
           id: "REQ-001",
-          title: "Cumplir el objetivo principal",
+          title: "Fulfill the main objective",
           description: prompt,
           priority: "must",
           source: "explicit",
           acceptanceCriteria: [
-            "La solución debe cumplir el objetivo principal definido por el usuario."
+            "The solution must fulfill the main objective defined by the user."
           ]
         }
       ],
@@ -74,45 +74,45 @@ export class MockAIProvider implements AIProvider {
         {
           id: "RISK-001",
           description:
-            "Los requisitos pueden necesitar refinamiento durante el análisis detallado.",
+            "Requirements may need refinement during detailed analysis.",
           level: "medium",
           mitigation:
-            "Mantener el blueprint como fuente de verdad y actualizarlo mediante decisiones registradas."
+            "Keep the blueprint as the source of truth and update it through recorded decisions."
         }
       ],
 
       recommendations: [
         {
           id: "REC-001",
-          title: "Arquitectura modular",
+          title: "Modular architecture",
           description:
-            "Separar dominio, infraestructura, agentes, seguridad y presentación.",
+            "Separate domain, infrastructure, agents, security and presentation.",
           rationale:
-            "Permite evolución independiente y reduce el acoplamiento.",
+            "Enables independent evolution and reduces coupling.",
           impact: "high"
         }
       ],
 
       architecture: {
         summary:
-          "Arquitectura modular orientada a componentes y agentes desacoplados.",
+          "Modular architecture based on components and decoupled agents.",
         frontend:
-          "Determinar según los requisitos del proyecto.",
+          "To be determined per project requirements.",
         backend:
-          "Determinar según los requisitos del proyecto.",
+          "To be determined per project requirements.",
         database:
-          "Determinar según las necesidades de persistencia.",
+          "To be determined per persistence needs.",
         infrastructure:
-          "Determinar según requisitos de disponibilidad y escala.",
+          "To be determined per availability and scale requirements.",
         integrations: [],
         security: [
-          "Gestión segura de credenciales.",
-          "Principio de mínimo privilegio.",
-          "Validación de entradas y salidas."
+          "Secure credential management.",
+          "Least-privilege principle.",
+          "Input and output validation."
         ],
         scalability: [
-          "Componentes desacoplados.",
-          "Interfaces estables entre agentes."
+          "Decoupled components.",
+          "Stable interfaces between agents."
         ]
       },
 
@@ -120,10 +120,10 @@ export class MockAIProvider implements AIProvider {
         {
           id: "PHASE-001",
           name: "Discovery",
-          objective: "Comprender y especificar el proyecto.",
+          objective: "Understand and specify the project.",
           deliverables: [
-            "Requisitos",
-            "Arquitectura",
+            "Requirements",
+            "Architecture",
             "Definition of Done"
           ],
           dependencies: []
@@ -131,31 +131,31 @@ export class MockAIProvider implements AIProvider {
         {
           id: "PHASE-002",
           name: "Implementation",
-          objective: "Construir la solución.",
+          objective: "Build the solution.",
           deliverables: [
-            "Aplicación funcional",
-            "Pruebas"
+            "Working application",
+            "Tests"
           ],
           dependencies: ["PHASE-001"]
         },
         {
           id: "PHASE-003",
           name: "Verification",
-          objective: "Validar calidad, seguridad y funcionamiento.",
+          objective: "Validate quality, security and operation.",
           deliverables: [
             "QA",
-            "Auditoría de seguridad",
-            "Validación final"
+            "Security audit",
+            "Final validation"
           ],
           dependencies: ["PHASE-002"]
         }
       ],
 
       definitionOfDone: [
-        "La solución cumple los requisitos obligatorios.",
-        "Las pruebas críticas pasan.",
-        "No existen vulnerabilidades críticas conocidas.",
-        "La documentación necesaria está disponible."
+        "The solution meets the mandatory requirements.",
+        "Critical tests pass.",
+        "No known critical vulnerabilities exist.",
+        "Required documentation is available."
       ],
 
       assumptions: [],

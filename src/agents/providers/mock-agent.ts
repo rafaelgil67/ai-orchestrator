@@ -34,7 +34,7 @@ export class MockAgent implements Agent {
     return {
       success: true,
       summary:
-        `Mock agent ejecutó correctamente la tarea "${task.title}".`,
+        `Mock agent successfully executed task "${task.title}".`,
       outputs: {
         taskId: task.id,
         capability: task.capability,

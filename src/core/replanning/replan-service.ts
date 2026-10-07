@@ -6,17 +6,17 @@ import {
 } from "./contracts.js";
 
 /**
- * Replan Engine MVP — planificación correctiva ADITIVA.
+ * Replan Engine MVP — ADDITIVE corrective planning.
  *
- * Reglas duras:
- *   · jamás toca, borra ni reabre una tarea existente;
- *   · cada finding plan_invalid produce UNA tarea correctiva nueva;
- *   · dependsOn solo apunta a tareas existentes (nunca entre nuevas,
- *     así que un ciclo es imposible por construcción);
- *   · validación ATÓMICA: si algún finding es inválido no se inserta
- *     ninguna tarea — nunca un plan parcialmente inválido;
- *   · dedup por `${taskId}:${finding}` — el mismo finding no genera
- *     tareas duplicadas en un mismo replan.
+ * Hard rules:
+ *   · never touches, deletes or reopens an existing task;
+ *   · each plan_invalid finding produces ONE new corrective task;
+ *   · dependsOn only points to existing tasks (never between new
+ *     ones, so a cycle is impossible by construction);
+ *   · ATOMIC validation: if any finding is invalid, no task is
+ *     inserted — never a partially invalid plan;
+ *   · dedup by `${taskId}:${finding}` — the same finding does not
+ *     produce duplicate tasks within a single replan.
  */
 export class DefaultReplanService implements ReplanService {
   constructor(
@@ -37,7 +37,7 @@ export class DefaultReplanService implements ReplanService {
       };
     }
 
-    // Validación atómica: todos los taskId referenciados deben existir.
+    // Atomic validation: every referenced taskId must exist.
     const unresolvable = request.failedFindings.filter(
       f => f.taskId !== undefined && !existingIds.has(f.taskId)
     );
@@ -53,7 +53,7 @@ export class DefaultReplanService implements ReplanService {
       };
     }
 
-    // Dedup conservador dentro del mismo replan.
+    // Conservative dedup within the same replan.
     const seen = new Set<string>();
     const unique = request.failedFindings.filter(f => {
       const key = `${f.taskId ?? ""}:${f.finding}`;
@@ -77,12 +77,12 @@ export class DefaultReplanService implements ReplanService {
             : "") +
           `Correct the plan-level outcome without reopening completed ` +
           `tasks. Reason: ${request.reason}`,
-        // Hereda el rol de la tarea origen para que el agente correcto
-        // la ejecute; fallback "coding".
+        // Inherits the origin task's role so the right agent executes
+        // it; falls back to "coding".
         role: origin?.role ?? "coding",
         status: "pending",
-        // Solo depende de la tarea origen (completed) si existe —
-        // nunca de tareas nuevas → ciclo imposible.
+        // Depends only on the origin task (completed) if it exists —
+        // never on new tasks → cycles are impossible.
         dependsOn: origin ? [origin.id] : [],
         acceptanceCriteria: [
           `Resolves plan-invalid finding: ${finding.finding}`

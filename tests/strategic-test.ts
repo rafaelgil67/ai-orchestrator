@@ -12,13 +12,13 @@ const strategicBrain = new StrategicBrainEngine(
 );
 
 const blueprint = await strategicBrain.analyze({
-  projectName: "Plataforma de gestión de seguros",
+  projectName: "Insurance management platform",
   prompt:
-    "Quiero crear una plataforma moderna para que un intermediario de seguros pueda administrar clientes, pólizas, renovaciones, siniestros y documentos.",
+    "I want to build a modern platform so an insurance intermediary can manage clients, policies, renewals, claims and documents.",
   additionalContext: [
-    "Debe ser segura.",
-    "Debe poder crecer a futuro.",
-    "La experiencia debe ser profesional y sencilla."
+    "It must be secure.",
+    "It must be able to grow in the future.",
+    "The experience must be professional and simple."
   ]
 });
 

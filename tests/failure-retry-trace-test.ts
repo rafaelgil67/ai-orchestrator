@@ -61,14 +61,14 @@ const scheduler =
     executionEngine
   );
 
-console.log("\n=== 1. CREAR PROYECTO ===");
+console.log("\n=== 1. CREATE PROJECT ===");
 
 const analysis =
   await strategicService.analyze({
     projectName:
-      "Prueba de fallo y reintento",
+      "Failure and retry test",
     prompt:
-      "Crear una plataforma para administrar clientes, pólizas, renovaciones, siniestros y documentos."
+      "Build a platform to manage clients, policies, renewals, claims and documents."
   });
 
 console.log({
@@ -77,14 +77,14 @@ console.log({
   status: analysis.project.status
 });
 
-console.log("\n=== 2. APROBAR ===");
+console.log("\n=== 2. APPROVE ===");
 
 approvalGate.approve(
   analysis.project.id,
-  "Aprobado para prueba controlada de fallo y reintento."
+  "Approved for controlled failure-and-retry testing."
 );
 
-console.log("\n=== 3. PLANIFICAR ===");
+console.log("\n=== 3. PLAN ===");
 
 planningService.plan(
   analysis.project.id
@@ -104,7 +104,7 @@ console.log({
     plannedProject.status
 });
 
-console.log("\n=== 4. PRIMERA EJECUCIÓN ===");
+console.log("\n=== 4. FIRST EXECUTION ===");
 
 const firstResults =
   await scheduler.runNext(
@@ -148,11 +148,11 @@ console.log({
     }))
 });
 
-console.log("\n=== 5. VALIDAR FALLO TRAZABLE ===");
+console.log("\n=== 5. VALIDATE TRACEABLE FAILURE ===");
 
 if (firstFailedTasks.length !== 1) {
   throw new Error(
-    `Se esperaba exactamente una tarea fallida en la primera ejecución. Resultado: ${firstFailedTasks.length}`
+    `Exactly one failed task was expected in the first execution. Result: ${firstFailedTasks.length}`
   );
 }
 
@@ -161,31 +161,31 @@ const failedTask =
 
 if (failedTask.status !== "failed") {
   throw new Error(
-    "FALLO: la tarea no quedó en estado failed."
+    "FAILURE: the task did not end in failed status."
   );
 }
 
 if (failedTask.attempts !== 1) {
   throw new Error(
-    `FALLO: se esperaba attempts=1 después del primer fallo. Actual: ${failedTask.attempts}`
+    `FAILURE: expected attempts=1 after the first failure. Actual: ${failedTask.attempts}`
   );
 }
 
 if (failedTask.assignedAgent !== failureAgent.id) {
   throw new Error(
-    "FALLO: la tarea no conserva el agente que produjo el fallo."
+    "FAILURE: the task does not preserve the agent that produced the failure."
   );
 }
 
 if (!failedTask.result) {
   throw new Error(
-    "FALLO: el AgentResult del fallo no fue persistido."
+    "FAILURE: the failure AgentResult was not persisted."
   );
 }
 
 if (failedTask.result.success !== false) {
   throw new Error(
-    "FALLO: el resultado persistido no conserva success=false."
+    "FAILURE: the persisted result does not preserve success=false."
   );
 }
 
@@ -204,7 +204,7 @@ console.log({
     failedTask.result.summary
 });
 
-console.log("\n=== 6. SEGUNDA EJECUCIÓN ===");
+console.log("\n=== 6. SECOND EXECUTION ===");
 
 const secondResults =
   await scheduler.runNext(
@@ -218,7 +218,7 @@ console.log({
     failureAgent.receivedTasks.length
 });
 
-console.log("\n=== 7. VALIDAR COMPORTAMIENTO ACTUAL ===");
+console.log("\n=== 7. VALIDATE CURRENT BEHAVIOR ===");
 
 const afterSecondExecution =
   stateManager.getProject(
@@ -233,7 +233,7 @@ const finalFailedTask =
 
 if (!finalFailedTask) {
   throw new Error(
-    "FALLO: la tarea desapareció del estado del proyecto."
+    "FAILURE: the task disappeared from the project state."
   );
 }
 
@@ -250,25 +250,25 @@ console.log({
 
 if (finalFailedTask.status !== "failed") {
   throw new Error(
-    "FALLO: el estado de la tarea cambió inesperadamente después del segundo scheduler.runNext()."
+    "FAILURE: the task status changed unexpectedly after the second scheduler.runNext()."
   );
 }
 
 if (finalFailedTask.attempts !== 1) {
   throw new Error(
-    "FALLO: attempts cambió inesperadamente sin ejecutar un reintento."
+    "FAILURE: attempts changed unexpectedly without running a retry."
   );
 }
 
 if (failureAgent.receivedTasks.length !== 1) {
   throw new Error(
-    "FALLO: el scheduler ejecutó nuevamente una tarea fallida sin existir mecanismo explícito de retry."
+    "FAILURE: the scheduler re-ran a failed task without an explicit retry mechanism."
   );
 }
 
 if (secondResults.length !== 0) {
   throw new Error(
-    "FALLO: se esperaba que el scheduler no seleccionara automáticamente una tarea en estado failed."
+    "FAILURE: the scheduler was expected not to automatically select a task in failed status."
   );
 }
 

@@ -12,14 +12,14 @@ export class ProjectApprovalGate implements ApprovalGate {
 
   approve(
     projectId: string,
-    rationale = "Proyecto aprobado para continuar con la planificación."
+    rationale = "Project approved to continue with planning."
   ): ApprovalResult {
     const project = this.stateManager.getProject(projectId);
 
     this.assertAwaitingApproval(project);
 
     this.stateManager.addDecision(projectId, {
-      title: "Aprobación del proyecto",
+      title: "Project approval",
       decision: "approved",
       rationale
     });
@@ -42,14 +42,14 @@ export class ProjectApprovalGate implements ApprovalGate {
 
   reject(
     projectId: string,
-    rationale = "El diagnóstico requiere revisión antes de continuar."
+    rationale = "The diagnosis requires review before continuing."
   ): ApprovalResult {
     const project = this.stateManager.getProject(projectId);
 
     this.assertAwaitingApproval(project);
 
     this.stateManager.addDecision(projectId, {
-      title: "Rechazo del proyecto",
+      title: "Project rejection",
       decision: "rejected",
       rationale
     });
