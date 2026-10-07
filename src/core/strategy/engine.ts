@@ -6,7 +6,8 @@
 import {
   StrategicAnalysisRequest,
   StrategicBrain,
-  ProjectBlueprint
+  ProjectBlueprint,
+  PROJECT_BLUEPRINT_JSON_SCHEMA
 } from "./contracts.js";
 
 import { BlueprintValidator } from "./validator.js";
@@ -37,7 +38,11 @@ export class StrategicBrainEngine implements StrategicBrain {
         "analysis",
         "structured_output"
       ],
-      responseFormat: "json"
+      responseFormat: "json",
+      responseSchema: {
+        name: "ProjectBlueprint",
+        schema: PROJECT_BLUEPRINT_JSON_SCHEMA
+      }
     };
 
     const response = await this.provider.generate(aiRequest);
@@ -83,7 +88,72 @@ You are not the implementation agent.
 
 Do not write application code.
 
-Return ONLY valid JSON matching the requested ProjectBlueprint structure.
+Your entire response must be a single valid JSON object matching
+the ProjectBlueprint structure defined in src/core/strategy/contracts.ts:
+
+{
+  "projectName": "string",
+  "executiveSummary": "string",
+  "originalPrompt": "string — echo the user's original prompt",
+  "interpretedObjective": "string",
+  "requirements": [{
+    "id": "string",
+    "title": "string",
+    "description": "string",
+    "priority": "must | should | could | out_of_scope",
+    "source": "explicit | inferred | recommended",
+    "acceptanceCriteria": ["string"]
+  }],
+  "ambiguities": [{
+    "id": "string",
+    "description": "string",
+    "impact": "string",
+    "suggestedResolution": "string",
+    "requiresUserDecision": "boolean"
+  }],
+  "risks": [{
+    "id": "string",
+    "description": "string",
+    "level": "low | medium | high | critical",
+    "mitigation": "string"
+  }],
+  "recommendations": [{
+    "id": "string",
+    "title": "string",
+    "description": "string",
+    "rationale": "string",
+    "impact": "low | medium | high"
+  }],
+  "architecture": {
+    "summary": "string",
+    "frontend": "string (optional)",
+    "backend": "string (optional)",
+    "database": "string (optional)",
+    "infrastructure": "string (optional)",
+    "integrations": ["string"],
+    "security": ["string"],
+    "scalability": ["string"]
+  },
+  "masterPlan": [{
+    "id": "string",
+    "name": "string",
+    "objective": "string",
+    "deliverables": ["string"],
+    "dependencies": ["string"]
+  }],
+  "definitionOfDone": ["string"],
+  "assumptions": ["string"],
+  "requiresApproval": true,
+  "generatedAt": "ISO-8601 timestamp string"
+}
+
+Rules:
+
+- Return ONLY the JSON object. No markdown. No \`\`\`json fences.
+- No explanation before or after the JSON.
+- All fields listed above are mandatory and must use the exact
+  names and types shown. Use empty arrays where no items apply.
+- Respond with one JSON object as your entire message.
 `;
   }
 

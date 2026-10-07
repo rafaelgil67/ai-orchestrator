@@ -11,6 +11,19 @@ export interface AIMessage {
   content: string;
 }
 
+/**
+ * Optional JSON Schema for OpenAI-compatible Structured Outputs.
+ * Providers that support `response_format: { type: "json_schema" }`
+ * enforce the schema; others may ignore it. Optional — requests
+ * without it behave exactly as before.
+ */
+export interface AIResponseSchema {
+  /** Schema name sent upstream, e.g. "ProjectBlueprint". */
+  name: string;
+  /** JSON Schema object describing the required response shape. */
+  schema: Record<string, unknown>;
+}
+
 export interface AIRequest {
   messages: AIMessage[];
 
@@ -23,6 +36,8 @@ export interface AIRequest {
   capabilities?: AIProviderCapability[];
 
   responseFormat?: "text" | "json";
+
+  responseSchema?: AIResponseSchema;
 }
 
 export interface AIResponse {

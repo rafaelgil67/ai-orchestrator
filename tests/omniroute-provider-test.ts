@@ -217,6 +217,75 @@ const expectProviderError = async (
     res.metadata?.testMode === true);
 }
 
+// B5 — structured output: responseSchema → json_schema + strict
+{
+  let seen: Record<string, unknown> = {};
+  const { server, url } = await stubServer(body => {
+    seen = body;
+    return { status: 200, json: okBody };
+  });
+  const p = new OmniRouteProvider({ baseUrl: url, model: "auto", timeoutMs: 5000 });
+  const schema = {
+    type: "object",
+    properties: { answer: { type: "string" } },
+    required: ["answer"],
+    additionalProperties: false
+  };
+  await p.generate({
+    ...baseReq,
+    responseFormat: "json",
+    responseSchema: { name: "ProjectBlueprint", schema }
+  });
+  server.close();
+
+  const rf = seen.response_format as {
+    type?: string;
+    json_schema?: { name?: string; strict?: boolean; schema?: unknown };
+  };
+  t("B5: schema → response_format.type json_schema",
+    rf?.type === "json_schema");
+  t("B5: json_schema.name + strict=true forwarded",
+    rf?.json_schema?.name === "ProjectBlueprint" &&
+    rf?.json_schema?.strict === true);
+  t("B5: schema passed through verbatim",
+    JSON.stringify(rf?.json_schema?.schema) === JSON.stringify(schema));
+}
+
+{
+  let seen: Record<string, unknown> = {};
+  const { server, url } = await stubServer(body => {
+    seen = body;
+    return { status: 200, json: okBody };
+  });
+  const p = new OmniRouteProvider({ baseUrl: url, model: "auto", timeoutMs: 5000 });
+  await p.generate({ ...baseReq, responseFormat: "json" });
+  server.close();
+  t("B5: no schema → legacy json_object preserved",
+    JSON.stringify(seen.response_format) ===
+      JSON.stringify({ type: "json_object" }));
+}
+
+{
+  // schema/contract drift guard — every ProjectBlueprint key must
+  // appear in the wire schema so contracts.ts stays the source
+  // of truth for both layers.
+  const { PROJECT_BLUEPRINT_JSON_SCHEMA } =
+    await import("../src/core/strategy/contracts.js");
+  const { MockStrategicBrain } =
+    await import("../src/core/strategy/providers/mock-strategic-brain.js");
+  const bp = await new MockStrategicBrain().analyze({ prompt: "x" });
+  const props = Object.keys(
+    (PROJECT_BLUEPRINT_JSON_SCHEMA as { properties: object }).properties
+  );
+  const required = (PROJECT_BLUEPRINT_JSON_SCHEMA as { required: string[] })
+    .required;
+  const bpKeys = Object.keys(bp);
+  t("B5: schema covers every ProjectBlueprint field",
+    bpKeys.every(k => props.includes(k)) &&
+    props.every(k => bpKeys.includes(k)) &&
+    props.every(k => required.includes(k)));
+}
+
 // L + M — factory: mock default, omniroute only with URL
 {
   t("L: default env → mock",

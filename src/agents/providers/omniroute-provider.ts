@@ -82,7 +82,16 @@ export class OmniRouteProvider implements AIProvider {
     if (request.maxTokens !== undefined) {
       body.max_tokens = request.maxTokens;
     }
-    if (request.responseFormat === "json") {
+    if (request.responseSchema) {
+      body.response_format = {
+        type: "json_schema",
+        json_schema: {
+          name: request.responseSchema.name,
+          strict: true,
+          schema: request.responseSchema.schema
+        }
+      };
+    } else if (request.responseFormat === "json") {
       body.response_format = { type: "json_object" };
     }
 
