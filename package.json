@@ -6,7 +6,7 @@
   "description": "AI Software Factory — experimental autonomous software-development orchestrator: brief → strategy → approval-gated planning → execution → verification → repair/replanning, with full autonomy tracing.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/UPDATE-WITH-YOUR-ORG/ai-software-factory.git"
+    "url": "https://github.com/rafaelgil67/ai-orchestrator.git"
   },
   "license": "MIT",
   "scripts": {
