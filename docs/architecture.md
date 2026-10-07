@@ -166,6 +166,46 @@ runs in a single `try/catch`. An exception produces a traced `block`
 with the original error message and `status=paused` — the next `run()`
 terminates in one cycle instead of repeating the failing operation.
 
+## Interactive Web Demo Layer — `src/web/` + `public/`
+
+A thin transport/presentation layer that exposes the real engine to a
+browser. It adds no orchestration logic — every behavior above still
+comes from the core.
+
+```
+Browser (public/ — vanilla JS + EventSource)
+   │ HTTP + JSON                    │ SSE
+   ▼                                ▲
+HTTP router (server.ts, node:http — zero deps)
+   │
+   ├─ validation.ts  strict input whitelist, body/Content-Type checks
+   ├─ sessions.ts    DemoSessionService — one isolated core stack per
+   │                 session, per-session run mutex, TTL cleanup,
+   │                 session/IP/SSE-listener caps, 25s heartbeat
+   └─ dto.ts         read-only serialization of core state
+        │
+        ▼
+   buildCoreStack() → ProjectStateManager + strategy + approval gate
+                      + AutonomyLoopEngine + scheduler/executor/verifier
+                      + repair/replan services   (identical composition
+                      as the CLI demo, one per session)
+```
+
+Key properties:
+
+- The web layer is **transport, session, validation and presentation
+  only** — it does not implement planning, execution, retry, repair,
+  replan, verification or budgets. `engine.step()` stays in the core.
+- Each session gets an **isolated core stack**; sessions share no
+  mutable state.
+- SSE emits events **derived from real state** (state, task, trace,
+  phase, decision, done) — including catch-up events on connect and a
+  non-event heartbeat.
+- The frontend **cannot skip the Approval Gate** — approval goes through
+  `ProjectApprovalGate.approve()` and the engine re-verifies it.
+- The layer makes **no modifications to the core**; deleting `src/web/`
+  leaves the engine untouched.
+
 ## Extension points
 
 - `Agent` — real executors (Devin, CI workers, …)
@@ -178,5 +218,6 @@ terminates in one cycle instead of repeating the failing operation.
 
 ## Explicit non-goals (current MVP)
 
-No external API/CLI server · no persistence · no parallel execution ·
-no event sourcing · no deployment phase · no real provider adapters.
+No authentication/authorization · no persistence · no parallel
+execution · no event sourcing · no deployment phase · no real provider
+adapters. The web layer is a demo frontend, not a public product API.

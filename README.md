@@ -6,7 +6,7 @@ execution, verification, repair and replanning.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/suites-12%2F12%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/suites-13%2F13%20passing-brightgreen.svg)](#testing)
 [![Status](https://img.shields.io/badge/status-experimental-orange.svg)](#current-status)
 
 > **Status: active research MVP.** The full orchestration loop works
@@ -32,12 +32,13 @@ traced, every budget is finite, every ambiguous failure pauses for a human.
 - On failure, picks the right level of recovery — **repair** the task or
   **replan** the plan — or pauses for a human when it's not sure.
 - Records **every transition** in a per-project autonomy trace.
-- Runs the whole thing as a **reproducible local demo** with
-  `MockAIProvider` + `MockAgent` — no credentials, no side effects.
+- Runs the whole thing as a **reproducible local demo** — via CLI
+  (`npm run dev`) or via an **interactive web demo** (`npm run demo`)
+  — with `MockAIProvider` + `MockAgent`, no credentials, no side effects.
 
 What it does **not** do yet: execute real projects via external agents,
-persist state, expose an API, or run as a hosted service. Those are the
-roadmap — see [From GitHub project to SaaS](#from-github-project-to-saas).
+persist state, authenticate users, or run as a hosted service. Those are
+the roadmap — see [From GitHub project to SaaS](#from-github-project-to-saas).
 
 ## The autonomy loop
 
@@ -125,11 +126,59 @@ The demo uses `MockAIProvider` for strategy and `MockAgent` for every
 task — it demonstrates the loop mechanics (dependencies, verification,
 recovery, tracing), not real code generation.
 
+## Interactive Web Demo
+
+The same engine is also available as a browser experience — a thin web
+layer over the **real core**, wired by composition, with zero duplicated
+orchestration logic:
+
+```bash
+npm run demo       # dev server → http://localhost:3000
+```
+
+or production-like, from the compiled build:
+
+```bash
+npm run build
+npm run start:web  # node dist/web/server.js → http://localhost:3000
+```
+
+Flow in the browser:
+
+```
+Brief → Analyze → Strategic Analysis → Approval Gate
+      → Planning → Execution → Verification → Completed
+```
+
+- **The Approval Gate is mandatory** — the engine stops and waits for an
+  explicit Approve/Reject click; nothing executes without it.
+- The loop runs **step-driven** (`engine.step()` per cycle), so progress
+  is visible between transitions.
+- Live updates stream over **SSE** (Server-Sent Events): state, task,
+  trace, phase, decision and done events.
+- Tasks and the **autonomy trace** are rendered from real core state.
+- Each browser session gets its own **isolated core stack** — sessions
+  never share mutable state.
+- Sessions are **in-memory and ephemeral**: they expire after ~30 minutes
+  of inactivity and are destroyed on server restart. There is **no
+  persistence and no database**.
+
+> **Warning — this is a public/experimental demo.** Do not enter
+> confidential information, credentials, personal data, client data,
+> policies, trade secrets or any other sensitive information into the
+> brief. Everything you type lives in server memory for the life of the
+> session and is visible to anyone who holds the session identifier.
+>
+> **`sessionId` is a capability token by design**: whoever has it can
+> view and control that session while it lives. This is acceptable for an
+> ephemeral demo — it is **not** authentication and must not be treated
+> as such.
+
 ## Build & test
 
 ```bash
 npm run build   # tsc → dist/
-npm test        # all 12 suites, each in a fresh process
+npm test        # all 13 suites, each in a fresh process
 ```
 
 ## Project layout
@@ -147,8 +196,16 @@ src/
     replanning/    additive corrective-planning service
     autonomy/      loop engine, decisions, trace contracts
     project-state/ state manager, project/task types
-tests/             12 independent suites + run-all runner
-docs/              architecture deep-dive
+  web/             interactive demo layer (zero-dependency node:http)
+    server.ts      HTTP router, statics, SSE endpoint, security headers
+    sessions.ts    session service: isolation, mutex, TTL, caps, heartbeat
+    validation.ts  strict input whitelist, body/Content-Type checks
+    dto.ts         read-only serialization of core state for the UI
+    errors.ts      stable JSON error contract
+    node-shims.d.ts minimal ambient Node typings (no @types/node dep)
+public/            demo frontend (vanilla HTML/CSS/JS + EventSource)
+tests/             13 independent suites + run-all runner
+docs/              architecture deep-dive + deployment notes
 ```
 
 ## Architecture
@@ -169,13 +226,84 @@ docs/              architecture deep-dive
 Full details — state machine, safety budgets, trace schema, extension
 points — in **[docs/architecture.md](docs/architecture.md)**.
 
+## Environment Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3000` | HTTP port for the web demo server. |
+| `TRUST_PROXY` | `false` | Trust `X-Forwarded-For` for client IP (used by the per-IP session cap). Enable **only** when the app runs behind a reverse proxy you control that correctly sets/overwrites the header — otherwise clients could spoof their IP and bypass the cap. Do not enable it just because the platform has a proxy; enable it when that proxy is properly configured and trusted. |
+
+Both are optional — the demo runs with zero configuration. Portable
+example (Linux/macOS; on Windows set the variable via your shell):
+
+```bash
+PORT=3000 npm run start:web
+TRUST_PROXY=true npm run start:web
+```
+
+## Security Model
+
+Controls that exist in the web layer today:
+
+- strict input whitelist — only `brief`, `projectName`, `rationale`
+  cross the API boundary;
+- request body limit (16 KB) and per-field limits (brief 4 KB,
+  name 120 chars, rationale 500 chars);
+- the Approval Gate is enforced by the core engine, not by the UI;
+- session isolation — one independent core stack per session;
+- capacity caps: 10 concurrent sessions, 3 per client IP;
+- SSE listener caps (5 per session, 50 process-wide) and a 25-second
+  heartbeat;
+- JSON `Content-Type` validation (`415` on mismatches);
+- strict CSP, `X-Frame-Options`, `X-Content-Type-Options`,
+  `Referrer-Policy`;
+- path traversal protection on static files;
+- sanitized API errors — no stack traces, no internals;
+- no external service calls, no persistent storage, no secrets required.
+
+What it deliberately does **not** have: authentication, per-user
+authorization, request-level rate limiting, persistence, user audit, or
+enterprise-grade protection. It is an experimental demo, not a SaaS.
+
+## Deployment
+
+The web demo needs a **persistent Node 20+ process** — sessions live in
+memory, so serverless-only platforms and static hosts (e.g. GitHub
+Pages) are not suitable.
+
+Requirements:
+
+- Node 20+ and npm;
+- `PORT` for the platform-assigned port;
+- `public/` deployed together with the runtime (`dist/`,
+  `package.json`, `package-lock.json` and installed dependencies);
+- HTTPS provided by the platform / reverse proxy;
+- a reverse proxy that does not buffer SSE (e.g. nginx:
+  `proxy_buffering off;`) — the app already sends a heartbeat every 25
+  seconds and sets `X-Accel-Buffering: no`;
+- `TRUST_PROXY=true` **only** when the proxy is correctly configured
+  and controlled (see [Environment Variables](#environment-variables)).
+
+```bash
+npm ci
+npm run build
+npm test
+npm run start:web
+```
+
+Conceptually compatible: Render, Railway, Fly.io, VPS + nginx — any
+platform that runs a persistent Node process. Practical notes in
+**[docs/web-demo-deployment.md](docs/web-demo-deployment.md)**.
+
 ## Current status
 
-Working: the complete loop above, mocked end-to-end, 12/12 test suites
-green, `npm run dev` reproducible from a clean clone.
+Working: the complete loop above — mocked end-to-end — in both the CLI
+(`npm run dev`) and the interactive web demo (`npm run demo`), with
+13/13 test suites green (including 51 web-layer assertions) and
+reproducible from a clean clone.
 
-Not yet: real provider adapters, persistence, API/UI, parallel
-execution, resume-from-paused.
+Not yet: real provider adapters, persistence, authentication,
+multi-user authorization, parallel execution, resume-from-paused.
 
 ## Roadmap
 
@@ -189,7 +317,7 @@ Devin adapter · OpenAI adapter · Anthropic adapter · pluggable providers
 **Phase 3 — Persistence**
 project persistence · execution history · audit/event log
 
-**Phase 4 — Web application**
+**Phase 4 — Web application** (interactive demo ✅ done — full app pending)
 dashboard · projects · tasks · agent activity · approval center ·
 live execution trace
 
@@ -211,13 +339,26 @@ open-source orchestration engine
             → hosted SaaS
 ```
 
-This is a **roadmap, not a feature list** — the repo today contains only
-Phase 1, plus the contracts the later phases plug into.
+This is a **roadmap, not a feature list** — the repo today contains the
+core loop plus the interactive web demo layer, mocked end-to-end.
 
 ## Limitations
 
-- In-memory only — state is lost on exit.
-- Mock providers — no real LLM planning or code execution.
+- Experimental MVP — mock providers, no real LLM planning or code
+  execution.
+- No authentication; `sessionId` acts as a capability token (see above).
+- Sessions are in-memory — restart destroys all active sessions and
+  there is no persistent database.
+- Never enter sensitive data into the demo.
+- No request-level rate limiter; abuse is mitigated primarily through
+  session, per-IP and SSE-listener caps.
+- Public deployment should terminate HTTPS at the reverse proxy /
+  platform layer.
+- A persistent Node process is required — serverless-only deployment is
+  not supported.
+- `public/` must be deployed together with the application runtime.
+- Graceful shutdown is not implemented — acceptable here because
+  sessions are ephemeral; a restart only loses active demo sessions.
 - Sequential execution — independent tasks are not parallelized.
 - Recovery classification needs a verifier that reports `kind`; plain
   string findings default to the repair path.
