@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Orchestrator — Interactive Demo</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <h1>AI Orchestrator</h1>
+    <p class="tagline">Autonomous agent orchestration with planning, execution, verification, recovery — and human approval.</p>
+    <p class="badge">Interactive Web Demo · Experimental MVP · mock agents</p>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- 1. BRIEF -->
+  <section id="brief-panel" class="card">
+    <h2>Start a demo</h2>
+    <label for="brief">What do you want to build?</label>
+    <textarea id="brief" rows="3" maxlength="4096"
+      placeholder="e.g. Build a small task-management web app with a REST API and automated tests"></textarea>
+    <label for="project-name">Project name <span class="muted">(optional)</span></label>
+    <input id="project-name" type="text" maxlength="120" placeholder="My Demo Project">
+    <button id="btn-analyze" class="primary">Analyze</button>
+    <p class="error" id="brief-error" hidden></p>
+  </section>
+
+  <!-- 2. ANALYSIS -->
+  <section id="analysis-panel" class="card" hidden>
+    <h2>Strategic analysis</h2>
+    <h3 id="analysis-name"></h3>
+    <p id="analysis-summary"></p>
+    <div class="grid2">
+      <div>
+        <h4>Requirements</h4>
+        <ul id="analysis-requirements"></ul>
+      </div>
+      <div>
+        <h4>Risks</h4>
+        <ul id="analysis-risks"></ul>
+      </div>
+    </div>
+    <div>
+      <h4>Recommendations</h4>
+      <ul id="analysis-recommendations"></ul>
+    </div>
+  </section>
+
+  <!-- 3. APPROVAL GATE -->
+  <section id="approval-panel" class="card gate" hidden>
+    <h2>Human approval required</h2>
+    <p>The engine has completed its analysis and is <strong>stopped</strong>. It will not plan or execute anything without your explicit approval — this is the Approval Gate.</p>
+    <label for="rationale">Rationale <span class="muted">(optional)</span></label>
+    <input id="rationale" type="text" maxlength="500" placeholder="Reason for your decision">
+    <div class="gate-actions">
+      <button id="btn-approve" class="primary">Approve</button>
+      <button id="btn-reject" class="danger">Reject</button>
+    </div>
+    <p class="error" id="approval-error" hidden></p>
+  </section>
+
+  <!-- 4. EXECUTION -->
+  <section id="execution-panel" class="card" hidden>
+    <div class="exec-header">
+      <h2>Execution</h2>
+      <button id="btn-run" class="primary">Start execution</button>
+    </div>
+
+    <ol id="phase-stepper" class="stepper">
+      <li data-phase="planning">Planning</li>
+      <li data-phase="execution">Execution</li>
+      <li data-phase="verification">Verification</li>
+      <li data-phase="completed">Completed</li>
+    </ol>
+
+    <div id="counters" class="counters">
+      <span>Cycles: <b id="c-cycles">0</b></span>
+      <span>Retries: <b id="c-retries">0</b></span>
+      <span>Repairs: <b id="c-repairs">0</b></span>
+      <span>Replans: <b id="c-replans">0</b></span>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <h4>Tasks</h4>
+        <ul id="task-list" class="tasks"></ul>
+      </div>
+      <div>
+        <h4>Autonomy trace</h4>
+        <ol id="trace-list" class="trace"></ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. RESULT -->
+  <section id="result-panel" class="card" hidden>
+    <h2 id="result-title"></h2>
+    <p id="result-detail"></p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <p>Demo sessions are ephemeral and are lost when the server restarts or the session expires (~30 min of inactivity). Do not enter sensitive data — agents are simulated.</p>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
