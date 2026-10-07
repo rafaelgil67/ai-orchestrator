@@ -35,12 +35,39 @@ declare module "node:http" {
 
 declare module "node:fs/promises" {
   export function readFile(path: string): Promise<Uint8Array>;
+  export function mkdir(
+    path: string,
+    options?: { recursive?: boolean }
+  ): Promise<string | undefined>;
+  export function rm(
+    path: string,
+    options?: { recursive?: boolean; force?: boolean }
+  ): Promise<void>;
+  export function realpath(path: string): Promise<string>;
+  export function readdir(path: string): Promise<string[]>;
+  export interface FileStat {
+    isSymbolicLink(): boolean;
+    isDirectory(): boolean;
+    size: number;
+  }
+  export function lstat(path: string): Promise<FileStat>;
+}
+
+declare module "node:os" {
+  export function tmpdir(): string;
+}
+
+declare module "node:crypto" {
+  export function randomUUID(): string;
 }
 
 declare module "node:path" {
   export function join(...parts: string[]): string;
   export function normalize(path: string): string;
   export function extname(path: string): string;
+  export function dirname(path: string): string;
+  export function isAbsolute(path: string): boolean;
+  export const sep: string;
 }
 
 declare module "node:url" {

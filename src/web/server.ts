@@ -21,6 +21,7 @@ import {
   DEFAULT_SESSION_CONFIG,
   SessionConfig
 } from "./sessions.js";
+import { WorkspaceManager } from "../workspace/workspace-manager.js";
 import { serializeTrace } from "./dto.js";
 import {
   assertJsonContentType,
@@ -224,13 +225,18 @@ export interface ServerOptions {
    * Env: TRUST_PROXY=true.
    */
   trustProxy?: boolean;
+  /** Phase A: override for tests — defaults to the tmpdir-rooted manager. */
+  workspaces?: WorkspaceManager;
 }
 
 export function createDemoServer(
   config: SessionConfig = DEFAULT_SESSION_CONFIG,
   options: ServerOptions = {}
 ): { server: Server; sessions: DemoSessionService } {
-  const sessions = new DemoSessionService(config);
+  const sessions = new DemoSessionService(
+    config,
+    options.workspaces ?? new WorkspaceManager()
+  );
   const trustProxy =
     options.trustProxy ?? process.env.TRUST_PROXY === "true";
 

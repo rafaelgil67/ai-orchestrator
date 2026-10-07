@@ -206,6 +206,32 @@ Key properties:
 - The layer makes **no modifications to the core**; deleting `src/web/`
   leaves the engine untouched.
 
+## Workspaces — `src/workspace/` (Phase A)
+
+`WorkspaceManager` owns one isolated, ephemeral directory per session —
+the future home of generated code. It manages **filesystem only**: no
+process execution, no shells, no network.
+
+- **Location:** `<os.tmpdir>/ai-orchestrator-workspaces/ws_<uuid>` —
+  outside the repo and `public/`; never served over HTTP and not part
+  of session DTOs. On platforms with ephemeral disks (e.g. Render),
+  workspaces disappear with the container — by design.
+- **Identity:** the on-disk id is server-generated (`ws_<uuid>`); the
+  session id is only a map key — user input never becomes a path.
+- **Isolation:** `resolve()` rejects absolute paths, NULs and `..`
+  escapes, checked lexically and via `realpath` (symlink escapes
+  included). Cross-workspace access is impossible by construction.
+- **Lifecycle:** `active → cleaned`; explicit `cleanup()` (idempotent,
+  serialized per id), `cleanupByOwner`, `cleanupAll`. The web demo
+  deletes a session's workspace when the session expires.
+- **Auditability:** `auditTrail()` records create/cleanup events
+  (in-memory, capped).
+- **What it cannot do yet:** execute code, enforce byte quotas
+  (`usage()` measures only), own a TTL policy, or persist artifacts.
+- **Phase D requirements (future sandbox):** code execution must run in
+  a container/VM — not this process — with no secrets in env, restricted
+  egress, CPU/mem/disk/time quotas and a destroyed filesystem.
+
 ## Extension points
 
 - `Agent` — real executors (Devin, CI workers, …)

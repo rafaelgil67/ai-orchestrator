@@ -23,12 +23,13 @@ import { ProjectApprovalGate } from "../core/governance/project-approval-gate.js
 import { PlanningService } from "../core/planning/planning-service.js";
 import { Planner } from "../core/planning/planner.js";
 import { AgentRegistry } from "../agents/providers/agent-registry.js";
-import { MockAIProvider } from "../agents/providers/mock-provider.js";
+import { createAIProvider } from "../agents/providers/provider-factory.js";
 import { MockAgent } from "../agents/providers/mock-agent.js";
 import { DefaultExecutionEngine } from "../core/execution/executor.js";
 import { DefaultExecutionScheduler } from "../core/execution/scheduler.js";
 import { VerificationService } from "../core/verification/verification-service.js";
 import { AutonomyLoopEngine } from "../core/autonomy/autonomy-engine.js";
+import { WorkspaceManager } from "../workspace/workspace-manager.js";
 import { ApiError } from "./errors.js";
 import { serializeProject, SessionDTO } from "./dto.js";
 
@@ -74,6 +75,8 @@ export interface DemoSession {
   clientIp: string;
   stack: CoreStack;
   projectId?: string;
+  /** Phase A: ephemeral per-session workspace id (never exposed to clients). */
+  workspaceId?: string;
   running: boolean;
   stoppedReason?: string;
   listeners: Set<ServerResponse>;
@@ -98,7 +101,7 @@ export function buildCoreStack(): CoreStack {
   const stateManager = new ProjectStateManager();
   const strategicService = new StrategicAnalysisService(
     stateManager,
-    new StrategicBrainEngine(new MockAIProvider(), new BlueprintValidator())
+    new StrategicBrainEngine(createAIProvider(), new BlueprintValidator())
   );
   const approvalGate = new ProjectApprovalGate(stateManager);
   const planningService = new PlanningService(stateManager, new Planner());
@@ -132,7 +135,8 @@ export class DemoSessionService {
     { unref?: () => void };
 
   constructor(
-    private readonly config: SessionConfig = DEFAULT_SESSION_CONFIG
+    private readonly config: SessionConfig = DEFAULT_SESSION_CONFIG,
+    private readonly workspaces?: WorkspaceManager
   ) {
     this.cleanupTimer = setInterval(
       () => this.expireStale(),
@@ -191,6 +195,21 @@ export class DemoSessionService {
       this.sessionsByIp.set(clientIp, set);
     }
     set.add(session.id);
+
+    // Phase A: per-session ephemeral workspace — best-effort. A
+    // filesystem failure must not break the demo; the session simply
+    // runs without a workspace.
+    if (this.workspaces) {
+      try {
+        const ws = await this.workspaces.create(session.id);
+        session.workspaceId = ws.id;
+      } catch (error) {
+        console.error(
+          `[demo] workspace creation failed for ${session.id}:`,
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
     return session;
   }
 
@@ -509,6 +528,16 @@ export class DemoSessionService {
         this.sseListenerTotal -= session.listeners.size;
         session.listeners.clear();
         this.sessions.delete(id);
+        if (this.workspaces) {
+          // Expired session ⇒ its workspace is deleted. Fire-and-forget:
+          // cleanup failures are logged, never thrown into the sweeper.
+          void this.workspaces.cleanupByOwner(id).catch(error => {
+            console.error(
+              `[demo] workspace cleanup failed for ${id}:`,
+              error instanceof Error ? error.message : error
+            );
+          });
+        }
         const ipSet = this.sessionsByIp.get(session.clientIp);
         ipSet?.delete(id);
         if (ipSet && ipSet.size === 0) {

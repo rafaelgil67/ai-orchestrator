@@ -6,7 +6,7 @@ execution, verification, repair and replanning.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/suites-13%2F13%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/suites-15%2F15%20passing-brightgreen.svg)](#testing)
 [![Status](https://img.shields.io/badge/status-experimental-orange.svg)](#current-status)
 
 > **Status: active research MVP.** The full orchestration loop works
@@ -178,7 +178,7 @@ Brief → Analyze → Strategic Analysis → Approval Gate
 
 ```bash
 npm run build   # tsc → dist/
-npm test        # all 13 suites, each in a fresh process
+npm test        # all 15 suites, each in a fresh process
 ```
 
 ## Project layout
@@ -196,6 +196,8 @@ src/
     replanning/    additive corrective-planning service
     autonomy/      loop engine, decisions, trace contracts
     project-state/ state manager, project/task types
+  workspace/       WorkspaceManager — isolated ephemeral dirs per
+                   session (Phase A: fs only, no code execution)
   web/             interactive demo layer (zero-dependency node:http)
     server.ts      HTTP router, statics, SSE endpoint, security headers
     sessions.ts    session service: isolation, mutex, TTL, caps, heartbeat
@@ -204,7 +206,7 @@ src/
     errors.ts      stable JSON error contract
     node-shims.d.ts minimal ambient Node typings (no @types/node dep)
 public/            demo frontend (vanilla HTML/CSS/JS + EventSource)
-tests/             13 independent suites + run-all runner
+tests/             15 independent suites + run-all runner
 docs/              architecture deep-dive + deployment notes
 ```
 
@@ -232,6 +234,10 @@ points — in **[docs/architecture.md](docs/architecture.md)**.
 |---|---|---|
 | `PORT` | `3000` | HTTP port for the web demo server. |
 | `TRUST_PROXY` | `false` | Trust `X-Forwarded-For` for client IP (used by the per-IP session cap). Enable **only** when the app runs behind a reverse proxy you control that correctly sets/overwrites the header — otherwise clients could spoof their IP and bypass the cap. Do not enable it just because the platform has a proxy; enable it when that proxy is properly configured and trusted. |
+| `AI_PROVIDER` | `mock` | Strategic-analysis provider. `mock` = synthetic blueprints (also what the public demo runs). `omniroute` = real LLM calls through an OmniRoute gateway — local/dev only. |
+| `OMNIROUTE_URL` | — | Base URL of an OmniRoute gateway (e.g. `http://localhost:20128`). Required when `AI_PROVIDER=omniroute`. |
+| `OMNIROUTE_API_KEY` | — | Optional bearer token for a secured OmniRoute instance. Never commit real keys. |
+| `OMNIROUTE_MODEL` | `auto` | Model id passed to OmniRoute. |
 
 Both are optional — the demo runs with zero configuration. Portable
 example (Linux/macOS; on Windows set the variable via your shell):
@@ -299,7 +305,7 @@ platform that runs a persistent Node process. Practical notes in
 
 Working: the complete loop above — mocked end-to-end — in both the CLI
 (`npm run dev`) and the interactive web demo (`npm run demo`), with
-13/13 test suites green (including 51 web-layer assertions) and
+15/15 test suites green (including 51 web-layer assertions) and
 reproducible from a clean clone.
 
 Not yet: real provider adapters, persistence, authentication,
