@@ -300,5 +300,36 @@ const expectProviderError = async (
     createAIProvider({ AI_PROVIDER: undefined }).id === "mock");
 }
 
+// R — bounded retry regression (B.8.7): OmniRoute inherits the policy
+{
+  // 503 → 200: transient retried once, message still says OmniRoute
+  let n = 0;
+  const { server, url } = await stubServer(() =>
+    ++n === 1 ? { status: 503 } : { status: 200, json: okBody });
+  const p = new OmniRouteProvider({
+    baseUrl: url, apiKey: "k", model: "auto", timeoutMs: 5000
+  });
+  const res = await p.generate(baseReq);
+  server.close();
+  t("R: 503 → retry → 200 (2 requests)",
+    res.content === "{\"blueprint\":true}" && n === 2);
+}
+{
+  // 401: permanent — exactly one request, message says OmniRoute
+  let n = 0;
+  const { server, url } = await stubServer(() => {
+    n++;
+    return { status: 401 };
+  });
+  const p = new OmniRouteProvider({
+    baseUrl: url, apiKey: "k", model: "auto", timeoutMs: 5000
+  });
+  const e = await p.generate(baseReq).catch(err => err);
+  server.close();
+  t("R: 401 → no retry, OmniRoute message",
+    e instanceof ProviderError && e.code === "unauthorized" &&
+      e.message.includes("OmniRoute") && n === 1);
+}
+
 console.log(`\n${passed} passed · ${failed} failed\n`);
 if (failed > 0) process.exit(1);

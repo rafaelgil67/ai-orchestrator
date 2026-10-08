@@ -45,11 +45,32 @@ export class ProviderError extends Error {
   constructor(
     public readonly code: ProviderErrorCode,
     message: string,
-    public readonly status?: number
+    public readonly status?: number,
+    /** Parsed+clamped Retry-After delay (ms); only set for 429s. */
+    public readonly retryAfterMs?: number
   ) {
     super(message);
     this.name = "ProviderError";
   }
+}
+
+/** Hard cap on retry backoff — never trust an arbitrary Retry-After. */
+const MAX_RETRY_DELAY_MS = 10_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Parses a Retry-After header (integer seconds only — HTTP-date forms
+ * fall back). Clamped to MAX_RETRY_DELAY_MS so a hostile/buggy upstream
+ * cannot park a request for minutes.
+ */
+function parseRetryAfterMs(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const seconds = Number(value.trim());
+  if (!Number.isInteger(seconds) || seconds < 0) return undefined;
+  return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
 }
 
 export class OmniRouteProvider implements AIProvider {
@@ -77,6 +98,54 @@ export class OmniRouteProvider implements AIProvider {
       );
     }
 
+    // Bounded retry (Phase B.8.7): at most ONE extra attempt, only for
+    // transient classes. Idempotent — generation has no side effects.
+    const maxAttempts = 2;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.requestOnce(request, baseUrl, attempt);
+      } catch (error) {
+        if (
+          !(error instanceof ProviderError) ||
+          attempt >= maxAttempts ||
+          !this.shouldRetry(error, request)
+        ) {
+          throw error;
+        }
+        await sleep(this.retryDelayMs(error));
+      }
+    }
+  }
+
+  private shouldRetry(
+    error: ProviderError,
+    request: AIRequest
+  ): boolean {
+    if (error.code === "bad_request") {
+      // Groq returns flaky 400s on strict json_schema requests — one
+      // retry is justified only for structured-output calls.
+      return request.responseSchema !== undefined;
+    }
+    return (
+      error.code === "rate_limited" ||
+      error.code === "provider_unavailable" ||
+      error.code === "timeout" ||
+      error.code === "network_error"
+    );
+  }
+
+  private retryDelayMs(error: ProviderError): number {
+    if (error.code === "rate_limited") {
+      return error.retryAfterMs ?? 1000;
+    }
+    return 500;
+  }
+
+  private async requestOnce(
+    request: AIRequest,
+    baseUrl: string,
+    attempt: number
+  ): Promise<AIResponse> {
     const body: Record<string, unknown> = {
       model: request.model ?? this.config.model,
       messages: request.messages
@@ -132,10 +201,14 @@ export class OmniRouteProvider implements AIProvider {
     const latencyMs = Date.now() - started;
 
     if (!res.ok) {
+      const code = this.codeForStatus(res.status);
       throw new ProviderError(
-        this.codeForStatus(res.status),
+        code,
         `${this.providerName} request failed (HTTP ${res.status}).`,
-        res.status
+        res.status,
+        code === "rate_limited"
+          ? parseRetryAfterMs(res.headers.get("retry-after"))
+          : undefined
       );
     }
 
@@ -166,7 +239,7 @@ export class OmniRouteProvider implements AIProvider {
       metadata: {
         simulated: false,
         latencyMs,
-        attempt: 1
+        attempt
       }
     };
   }
