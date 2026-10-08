@@ -116,8 +116,8 @@ const expectProviderError = async (
 
   t("A: messages mapped 1:1",
     JSON.stringify(seen.messages) === JSON.stringify(baseReq.messages));
-  t("A: temperature + max_tokens mapped",
-    seen.temperature === 0.2 && seen.max_tokens === 500);
+  t("A: temperature + max_completion_tokens mapped",
+    seen.temperature === 0.2 && seen.max_completion_tokens === 500);
   t("A: model from config", seen.model === "auto");
   t("B: content+model+usage mapped",
     res.content === "{\"blueprint\":true}" &&
@@ -308,6 +308,37 @@ const expectProviderError = async (
     bpKeys.every(k => props.includes(k)) &&
     props.every(k => bpKeys.includes(k)) &&
     props.every(k => required.includes(k)));
+}
+
+// B.10.3 — engine sends BLUEPRINT_MAX_COMPLETION_TOKENS through the
+// wire as max_completion_tokens (the truncation root cause from B.10.2).
+{
+  const { StrategicBrainEngine, BLUEPRINT_MAX_COMPLETION_TOKENS } =
+    await import("../src/core/strategy/engine.js");
+  const { BlueprintValidator } =
+    await import("../src/core/strategy/validator.js");
+  const { MockStrategicBrain } =
+    await import("../src/core/strategy/providers/mock-strategic-brain.js");
+  const bp = await new MockStrategicBrain().analyze({ prompt: "x" });
+  let seen: Record<string, unknown> = {};
+  const { server, url } = await stubServer(body => {
+    seen = body;
+    return {
+      status: 200,
+      json: { choices: [{ message: { content: JSON.stringify(bp) } }] }
+    };
+  });
+  const provider = new OmniRouteProvider({
+    baseUrl: url, model: "auto", timeoutMs: 5000
+  });
+  const engine = new StrategicBrainEngine(provider, new BlueprintValidator());
+  await engine.analyze({ projectName: "t", prompt: "test" });
+  server.close();
+  t("B10.3: engine sets blueprint token budget",
+    seen.max_completion_tokens === 16384 &&
+    BLUEPRINT_MAX_COMPLETION_TOKENS === 16_384);
+  t("B10.3: legacy max_tokens NOT sent",
+    seen.max_tokens === undefined);
 }
 
 // L + M — factory: mock default, omniroute only with URL

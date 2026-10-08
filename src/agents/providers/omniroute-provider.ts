@@ -154,7 +154,9 @@ export class OmniRouteProvider implements AIProvider {
       body.temperature = request.temperature;
     }
     if (request.maxTokens !== undefined) {
-      body.max_tokens = request.maxTokens;
+      // max_completion_tokens (incl. reasoning) is the param
+      // OpenAI-compatible reasoning upstreams enforce — see B.10.2.
+      body.max_completion_tokens = request.maxTokens;
     }
     if (request.responseSchema) {
       body.response_format = {

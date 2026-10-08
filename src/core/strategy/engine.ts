@@ -12,6 +12,16 @@ import {
 
 import { BlueprintValidator } from "./validator.js";
 
+/**
+ * Completion-token budget for blueprint generation (Phase B.10.3).
+ * gpt-oss-120b reasons before writing, and reasoning tokens consume
+ * the completion budget — without an explicit cap, upstreams apply a
+ * low default and complex prompts get truncated mid-JSON (Groq then
+ * fails schema validation with HTTP 400). 16k covers large
+ * blueprints + reasoning headroom without being unbounded.
+ */
+export const BLUEPRINT_MAX_COMPLETION_TOKENS = 16_384;
+
 export class StrategicBrainEngine implements StrategicBrain {
   constructor(
     private readonly provider: AIProvider,
@@ -39,6 +49,7 @@ export class StrategicBrainEngine implements StrategicBrain {
         "structured_output"
       ],
       responseFormat: "json",
+      maxTokens: BLUEPRINT_MAX_COMPLETION_TOKENS,
       responseSchema: {
         name: "ProjectBlueprint",
         schema: PROJECT_BLUEPRINT_JSON_SCHEMA
