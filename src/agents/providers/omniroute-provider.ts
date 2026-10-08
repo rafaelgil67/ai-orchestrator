@@ -53,10 +53,15 @@ export class ProviderError extends Error {
 }
 
 export class OmniRouteProvider implements AIProvider {
-  readonly id = "omniroute";
-  readonly name = "OmniRoute Gateway";
+  readonly id: string = "omniroute";
+  readonly name: string = "OmniRoute Gateway";
 
-  constructor(private readonly config: OmniRouteConfig) {}
+  /** Short name used in error messages (e.g. "OmniRoute request failed"). */
+  protected readonly providerName: string = "OmniRoute";
+  /** Noun phrase used in connectivity errors (e.g. "the OmniRoute gateway"). */
+  protected readonly providerLabel: string = "OmniRoute gateway";
+
+  constructor(protected readonly config: OmniRouteConfig) {}
 
   supports(capability: AIProviderCapability): boolean {
     // Chat-completions gateway: all text capabilities, no vision.
@@ -68,7 +73,7 @@ export class OmniRouteProvider implements AIProvider {
     if (!baseUrl) {
       throw new ProviderError(
         "not_configured",
-        "OmniRoute base URL is not configured."
+        `${this.providerName} base URL is not configured.`
       );
     }
 
@@ -115,12 +120,13 @@ export class OmniRouteProvider implements AIProvider {
       if (this.isTimeout(error)) {
         throw new ProviderError(
           "timeout",
-          `OmniRoute request timed out after ${this.config.timeoutMs}ms.`
+          `${this.providerName} request timed out after ` +
+            `${this.config.timeoutMs}ms.`
         );
       }
       throw new ProviderError(
         "network_error",
-        "Could not reach the OmniRoute gateway."
+        `Could not reach the ${this.providerLabel}.`
       );
     }
     const latencyMs = Date.now() - started;
@@ -128,7 +134,7 @@ export class OmniRouteProvider implements AIProvider {
     if (!res.ok) {
       throw new ProviderError(
         this.codeForStatus(res.status),
-        `OmniRoute request failed (HTTP ${res.status}).`,
+        `${this.providerName} request failed (HTTP ${res.status}).`,
         res.status
       );
     }
@@ -139,7 +145,7 @@ export class OmniRouteProvider implements AIProvider {
     } catch {
       throw new ProviderError(
         "invalid_response",
-        "OmniRoute returned a non-JSON response."
+        `${this.providerName} returned a non-JSON response.`
       );
     }
 
@@ -147,7 +153,8 @@ export class OmniRouteProvider implements AIProvider {
     if (!parsed) {
       throw new ProviderError(
         "invalid_response",
-        "OmniRoute response missing choices[0].message.content."
+        `${this.providerName} response missing ` +
+          `choices[0].message.content.`
       );
     }
 

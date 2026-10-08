@@ -11,6 +11,7 @@
  *    responses carry `metadata.simulated` to keep the two honest.
  */
 import { AIProvider } from "../contracts/ai-provider.js";
+import { GroqProvider, GROQ_DEFAULT_MODEL } from "./groq-provider.js";
 import { MockAIProvider } from "./mock-provider.js";
 import { OmniRouteProvider } from "./omniroute-provider.js";
 
@@ -34,6 +35,17 @@ export function createAIProvider(
       model: env.OMNIROUTE_MODEL?.trim() || "auto",
       timeoutMs:
         Number(env.OMNIROUTE_TIMEOUT_MS) || DEFAULT_OMNIROUTE_TIMEOUT_MS
+    });
+  }
+  if (env.AI_PROVIDER === "groq") {
+    // Explicit provider, no mock fallback: a missing GROQ_API_KEY
+    // yields a provider whose generate() fails with
+    // ProviderError("not_configured") instead of silently using mock.
+    return new GroqProvider({
+      apiKey: env.GROQ_API_KEY?.trim() || undefined,
+      model: env.AI_MODEL?.trim() || GROQ_DEFAULT_MODEL,
+      timeoutMs:
+        Number(env.GROQ_TIMEOUT_MS) || DEFAULT_OMNIROUTE_TIMEOUT_MS
     });
   }
   return new MockAIProvider();
