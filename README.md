@@ -234,12 +234,14 @@ points — in **[docs/architecture.md](docs/architecture.md)**.
 |---|---|---|
 | `PORT` | `3000` | HTTP port for the web demo server. |
 | `TRUST_PROXY` | `false` | Trust `X-Forwarded-For` for client IP (used by the per-IP session cap). Enable **only** when the app runs behind a reverse proxy you control that correctly sets/overwrites the header — otherwise clients could spoof their IP and bypass the cap. Do not enable it just because the platform has a proxy; enable it when that proxy is properly configured and trusted. |
-| `AI_PROVIDER` | `mock` | Strategic-analysis provider. `mock` = synthetic blueprints (also what the public demo runs). `omniroute` = real LLM calls through an OmniRoute gateway — local/dev only. `groq` = direct Groq API (OpenAI-compatible, strict structured output). |
+| `AI_PROVIDER` | `mock` | Strategic-analysis provider. `mock` = synthetic blueprints (also what the public demo runs). `omniroute` = real LLM calls through an OmniRoute gateway — local/dev only. `groq` = direct Groq API (OpenAI-compatible, strict structured output). `openrouter` = direct OpenRouter API (OpenAI-compatible; `openrouter/free` routes across free models). |
 | `OMNIROUTE_URL` | — | Base URL of an OmniRoute gateway (e.g. `http://localhost:20128`). Required when `AI_PROVIDER=omniroute`. |
 | `OMNIROUTE_API_KEY` | — | Optional bearer token for a secured OmniRoute instance. Never commit real keys. |
 | `OMNIROUTE_MODEL` | `auto` | Model id passed to OmniRoute. |
 | `GROQ_API_KEY` | — | Required when `AI_PROVIDER=groq` (direct Groq, no gateway). Server-side secret — never commit it. |
 | `AI_MODEL` | `openai/gpt-oss-120b` | Groq model id when `AI_PROVIDER=groq`. |
+| `OPENROUTER_API_KEY` | — | Required when `AI_PROVIDER=openrouter` (direct OpenRouter, no gateway). Server-side secret — never commit it. |
+| `OPENROUTER_MODEL` | `openrouter/free` | OpenRouter model id when `AI_PROVIDER=openrouter`. The free router picks among free models — rate limits apply and strict structured-output support varies by the routed model. |
 
 Both are optional — the demo runs with zero configuration. Portable
 example (Linux/macOS; on Windows set the variable via your shell):

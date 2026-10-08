@@ -215,7 +215,14 @@ export class OmniRouteProvider implements AIProvider {
     let data: unknown;
     try {
       data = await res.json();
-    } catch {
+    } catch (error) {
+      if (this.isTimeout(error)) {
+        throw new ProviderError(
+          "timeout",
+          `${this.providerName} request timed out after ` +
+            `${this.config.timeoutMs}ms.`
+        );
+      }
       throw new ProviderError(
         "invalid_response",
         `${this.providerName} returned a non-JSON response.`

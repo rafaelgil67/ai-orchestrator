@@ -18,6 +18,11 @@
 
 <main class="container">
 
+  <!-- Shared activity line: contextual status for async operations
+       (AI analysis, run hand-off, SSE reconnect). role=status +
+       aria-live announce it to assistive tech. -->
+  <p id="activity" class="activity" role="status" aria-live="polite" hidden></p>
+
   <!-- 1. BRIEF -->
   <section id="brief-panel" class="card">
     <h2>Start a demo</h2>

@@ -9,8 +9,12 @@
  */
 const strings = {
   en: {
-    analyzing: "Analyzing…",
+    analyzing: "Analyzing",
+    analyzingProvider: "Analyzing your brief with the AI provider…",
     analyze: "Analyze",
+    approving: "Approving",
+    rejecting: "Rejecting",
+    executing: "Executing…",
     running: "Running…",
     startExecution: "Start execution",
     awaitingApproval: "Awaiting approval",
@@ -72,32 +76,80 @@ function showError(el, error) {
   show(el);
 }
 
-// ---- 1. Create demo ----
-$("btn-analyze").addEventListener("click", async () => {
-  const btn = $("btn-analyze");
-  const brief = $("brief").value;
-  hide($("brief-error"));
-  btn.disabled = true;
-  btn.textContent = t.analyzing;
-  try {
-    const { sessionId } = await api("/api/demo", "POST", {
-      brief,
-      projectName: $("project-name").value || undefined
-    });
-    state.sessionId = sessionId;
-    connectEvents(sessionId);
-    const { session } = await api(`/api/demo/${sessionId}`);
-    renderSession(session);
-  } catch (error) {
-    showError($("brief-error"), error);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = t.analyze;
+// ---- Activity indicators (B.8.10) ----
+// busy-dots = immediate button state; #activity = contextual operation
+// status; task dots = per-task execution; stepper = macro progress.
+function busyDots() {
+  const dots = document.createElement("span");
+  dots.className = "busy-dots";
+  dots.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i++) dots.append(document.createElement("span"));
+  return dots;
+}
+
+// Shared contextual status line — one message at a time; clears itself
+// when the operation hands off (SSE state/done) or finishes.
+function setActivity(message) {
+  const el = $("activity");
+  if (!el) return;
+  el.textContent = "";
+  if (!message) {
+    el.hidden = true;
+    return;
   }
+  el.append(document.createTextNode(message), busyDots());
+  el.hidden = false;
+}
+
+/**
+ * Runs fn() with the button in a busy state: disabled (blocks
+ * double-submit), label + animated dots, restored in finally —
+ * whether fn resolves or throws.
+ */
+async function withBusy(btn, busyLabel, fn) {
+  if (btn.disabled) return undefined;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "";
+  btn.append(document.createTextNode(busyLabel), busyDots());
+  try {
+    return await fn();
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+// ---- 1. Create demo ----
+$("btn-analyze").addEventListener("click", () => {
+  const btn = $("btn-analyze");
+  hide($("brief-error"));
+  setActivity(t.analyzingProvider);
+  withBusy(btn, t.analyzing, async () => {
+    try {
+      const { sessionId } = await api("/api/demo", "POST", {
+        brief: $("brief").value,
+        projectName: $("project-name").value || undefined
+      });
+      state.sessionId = sessionId;
+      connectEvents(sessionId);
+      const { session } = await api(`/api/demo/${sessionId}`);
+      renderSession(session);
+    } catch (error) {
+      showError($("brief-error"), error);
+    } finally {
+      setActivity(null);
+    }
+  });
 });
 
 // ---- 2. Approval gate ----
+// `deciding` guards the other gate button while a decision is in
+// flight — withBusy only protects the clicked button.
+let deciding = false;
 async function decide(action) {
+  if (deciding) return;
+  deciding = true;
   hide($("approval-error"));
   try {
     const { session } = await api(
@@ -108,20 +160,34 @@ async function decide(action) {
     renderSession(session);
   } catch (error) {
     showError($("approval-error"), error);
+  } finally {
+    deciding = false;
   }
 }
-$("btn-approve").addEventListener("click", () => decide("approve"));
-$("btn-reject").addEventListener("click", () => decide("reject"));
+$("btn-approve").addEventListener("click", e =>
+  withBusy(e.currentTarget, t.approving, () => decide("approve")));
+$("btn-reject").addEventListener("click", e =>
+  withBusy(e.currentTarget, t.rejecting, () => decide("reject")));
 
 // ---- 3. Run ----
-$("btn-run").addEventListener("click", async () => {
+$("btn-run").addEventListener("click", () => {
   const btn = $("btn-run");
+  if (btn.disabled) return;
   btn.disabled = true;
-  try {
-    await api(`/api/demo/${state.sessionId}/run`, "POST", {});
-  } catch {
-    btn.disabled = false;
-  }
+  btn.textContent = "";
+  btn.append(document.createTextNode(t.executing), busyDots());
+  setActivity(t.executing);
+  api(`/api/demo/${state.sessionId}/run`, "POST", {})
+    .catch(() => {
+      // Run was not accepted — restore the button; the activity line
+      // clears on the next SSE state event or right here.
+      btn.textContent = t.startExecution;
+      btn.disabled = false;
+      setActivity(null);
+    });
+  // On success the SSE "state" event drives renderSession, which sets
+  // the run label/disabled and clears the activity line — the task
+  // panel then becomes the primary activity indicator.
 });
 
 // ---- 4. SSE ----
@@ -131,14 +197,20 @@ function connectEvents(sessionId) {
   state.events = es;
 
   es.addEventListener("state", e => {
+    // A live stream means the connection is healthy and the last
+    // operation handed off — clear the shared activity line.
+    setActivity(null);
     renderSession(JSON.parse(e.data).session);
   });
   es.addEventListener("trace", e => {
     appendTrace(JSON.parse(e.data).entry);
   });
   es.addEventListener("done", e => {
+    setActivity(null);
     renderDone(JSON.parse(e.data));
   });
+  // EventSource auto-reconnects — make the silent gap visible.
+  es.onerror = () => setActivity(t.connError);
 }
 
 // ---- Rendering ----

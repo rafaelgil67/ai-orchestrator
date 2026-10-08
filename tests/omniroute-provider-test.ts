@@ -25,25 +25,49 @@ function t(name: string, condition: boolean, detail = ""): void {
 
 type Handler = (
   body: Record<string, unknown>,
-  headers: Record<string, string | string[] | undefined>
-) => { status: number; json?: unknown; delayMs?: number };
+  headers: Record<string, string | string[] | undefined>,
+  callCount: number
+) => {
+  status: number;
+  json?: unknown;
+  delayMs?: number;
+  /** Raw response body (bypasses JSON.stringify — for invalid_response). */
+  raw?: string;
+  /** Send headers (+ optional partial body) then hold the body open —
+   *  simulates upstream keep-alive padding during slow generation. */
+  stallMs?: number;
+  partialBody?: string;
+};
 
-function stubServer(handler: Handler): Promise<{ server: Server; url: string }> {
+function stubServer(handler: Handler): Promise<{
+  server: Server;
+  url: string;
+  calls: () => number;
+}> {
+  let count = 0;
   const server = createServer((req, res) => {
     let raw = "";
     req.on("data", (c: Buffer) => (raw += c));
     req.on("end", async () => {
-      const out = handler(JSON.parse(raw || "{}"), req.headers);
+      count++;
+      const out = handler(JSON.parse(raw || "{}"), req.headers, count);
       if (out.delayMs) await new Promise(r => setTimeout(r, out.delayMs));
       res.writeHead(out.status, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(out.json ?? {}));
+      if (out.stallMs !== undefined) {
+        if (out.partialBody) res.write(out.partialBody);
+        setTimeout(() => {
+          try { res.end(); } catch { /* client already aborted */ }
+        }, out.stallMs);
+        return;
+      }
+      res.end(out.raw ?? JSON.stringify(out.json ?? {}));
     });
   });
   return new Promise(r =>
     server.listen(0, () => {
       const a = server.address();
       const port = typeof a === "object" && a ? a.port : 0;
-      r({ server, url: `http://127.0.0.1:${port}` });
+      r({ server, url: `http://127.0.0.1:${port}`, calls: () => count });
     })
   );
 }
@@ -329,6 +353,60 @@ const expectProviderError = async (
   t("R: 401 → no retry, OmniRoute message",
     e instanceof ProviderError && e.code === "unauthorized" &&
       e.message.includes("OmniRoute") && n === 1);
+}
+
+// B.9.7 — timeout DURING body read must classify as "timeout", not
+// "invalid_response": headers arrive (200), upstream streams keep-alive
+// padding, client abort fires mid-res.json().
+{
+  // A + B + D: stall → timeout classified correctly → retried once →
+  // exhaustion propagates the last "timeout" error (2 calls total).
+  const { server, url, calls } = await stubServer(() => ({
+    status: 200, stallMs: 60_000, partialBody: "   "
+  }));
+  const p = new OmniRouteProvider({ baseUrl: url, model: "auto", timeoutMs: 50 });
+  const e = await p.generate(baseReq).catch(err => err);
+  server.close();
+  t("B97: body-read abort → timeout (not invalid_response)",
+    e instanceof ProviderError && e.code === "timeout",
+    String((e as Error)?.message));
+  t("B97: body-read timeout → retried then exhausted (2 calls)",
+    calls() === 2);
+}
+{
+  // C: timeout during body read on attempt 1, success on attempt 2.
+  const { server, url, calls } = await stubServer((_b, _h, n) =>
+    n === 1
+      ? { status: 200, stallMs: 60_000, partialBody: "   " }
+      : { status: 200, json: okBody });
+  const p = new OmniRouteProvider({ baseUrl: url, model: "auto", timeoutMs: 50 });
+  const res = await p.generate(baseReq);
+  server.close();
+  t("B97: body-read timeout → retry → 200 (attempt 2)",
+    res.content === "{\"blueprint\":true}" && calls() === 2 &&
+    res.metadata?.attempt === 2);
+}
+{
+  // E: genuinely non-JSON 200 body stays invalid_response — no retry.
+  const { server, url, calls } = await stubServer(() => ({
+    status: 200, raw: "upstream returned html"
+  }));
+  const p = new OmniRouteProvider({ baseUrl: url, model: "auto", timeoutMs: 2000 });
+  const e = await p.generate(baseReq).catch(err => err);
+  server.close();
+  t("B97: real non-JSON body → invalid_response, no retry",
+    e instanceof ProviderError && e.code === "invalid_response" &&
+    calls() === 1);
+}
+{
+  // G: 404 → provider_not_found, no retry.
+  const { server, url, calls } = await stubServer(() => ({ status: 404 }));
+  const p = new OmniRouteProvider({ baseUrl: url, model: "auto", timeoutMs: 2000 });
+  const e = await p.generate(baseReq).catch(err => err);
+  server.close();
+  t("B97: 404 → provider_not_found, no retry",
+    e instanceof ProviderError && e.code === "provider_not_found" &&
+    calls() === 1);
 }
 
 console.log(`\n${passed} passed · ${failed} failed\n`);
